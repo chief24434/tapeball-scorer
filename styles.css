@@ -1,0 +1,125 @@
+/* ---------------------------------------------------------
+   TAPEBALL GROUND SCORER & TOURNAMENT SYSTEM STYLES
+--------------------------------------------------------- */
+
+:root {
+  --bg: #0D1712;
+  --bg2: #0A130F;
+  --panel: #15241C;
+  --panel2: #1B2E23;
+  --panel-border: #2A3E30;
+  --tape: #F2A93B;
+  --tape2: #F2661D;
+  --wicket: #D14B41;
+  --free: #4FA8D6;
+  --ink: #F4F1E6;
+  --ink-dim: #9AAD9F;
+  --ink-faint: #5E7267;
+  --win: #6FBF73;
+  --font-display: 'Teko', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.tb-btn {
+  transition: transform 0.08s ease, filter 0.12s ease, background 0.15s ease;
+  user-select: none;
+}
+
+.tb-btn:active {
+  transform: scale(0.95);
+  filter: brightness(0.9);
+}
+
+.tb-fadein {
+  animation: tbFade 0.25s ease-out;
+}
+
+@keyframes tbFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tb-pulse {
+  animation: tbPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tbPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--panel-border);
+  border-radius: 4px;
+}
+
+input, select, textarea {
+  outline: none;
+  font-family: var(--font-body);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--tape) !important;
+}
+
+.badge-qual {
+  background: rgba(111, 191, 115, 0.15);
+  color: var(--win);
+  border: 1px solid var(--win);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.badge-elim {
+  background: rgba(209, 75, 65, 0.15);
+  color: var(--wicket);
+  border: 1px solid var(--wicket);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.badge-direct {
+  background: rgba(242, 169, 59, 0.15);
+  color: var(--tape);
+  border: 1px solid var(--tape);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.table-row-hover:hover {
+  background-color: var(--panel2);
+}
