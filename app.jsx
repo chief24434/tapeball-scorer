@@ -47,8 +47,8 @@ function loadLocal(key) {
 
 async function apiFetch(endpoint, method = 'GET', data = null) {
   const vpsUrl = loadLocal("tapeball:vps_url");
-  if (!vpsUrl) return null;
-  const baseUrl = vpsUrl.replace(/\/$/, "");
+  // Default to relative /api path (proxied by Vercel server-to-server) or explicit VPS URL
+  const baseUrl = vpsUrl ? vpsUrl.replace(/\/$/, "") : "";
   try {
     const options = { method, headers: { 'Content-Type': 'application/json' } };
     if (data && method !== 'GET') options.body = JSON.stringify(data);
@@ -66,8 +66,7 @@ function useStorageSync(key, apiPath = null) {
   const syncData = useCallback(async () => {
     const local = loadLocal(key);
     setData(local);
-    const vpsUrl = loadLocal("tapeball:vps_url");
-    if (vpsUrl && apiPath) {
+    if (apiPath) {
       const remote = await apiFetch(apiPath, 'GET');
       if (remote !== null && JSON.stringify(remote) !== JSON.stringify(local)) {
         saveLocal(key, remote);
@@ -80,7 +79,8 @@ function useStorageSync(key, apiPath = null) {
     syncData();
     function handleStorage() { syncData(); }
     window.addEventListener('storage', handleStorage);
-    const interval = setInterval(syncData, 3000);
+    // Poll every 1 second for fast live match updates across devices
+    const interval = setInterval(syncData, 1000);
     return () => {
       window.removeEventListener('storage', handleStorage);
       clearInterval(interval);
@@ -90,8 +90,7 @@ function useStorageSync(key, apiPath = null) {
   const update = useCallback(async (val) => {
     saveLocal(key, val);
     setData(val);
-    const vpsUrl = loadLocal("tapeball:vps_url");
-    if (vpsUrl && apiPath) {
+    if (apiPath) {
       await apiFetch(apiPath, 'POST', val);
     }
   }, [key, apiPath]);
@@ -234,8 +233,8 @@ function BackBar({ title, onBack, right, onVpsClick, vpsConfigured }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {onVpsClick && (
-          <button onClick={onVpsClick} className="tb-btn" style={{ background: vpsConfigured ? "rgba(111,191,115,0.15)" : C.panel2, border: `1px solid ${vpsConfigured ? C.win : C.panelBorder}`, color: vpsConfigured ? C.win : C.inkFaint, padding: "4px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            {vpsConfigured ? "🟢 VPS Active" : "⚙️ VPS Sync"}
+          <button onClick={onVpsClick} className="tb-btn" style={{ background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "4px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            🟢 VPS Connected
           </button>
         )}
         {right}
@@ -384,7 +383,7 @@ function App() {
           onNew={() => setScreen("setup")}
           onWatch={() => setScreen("watch")}
           onTournament={() => setScreen("tournament")}
-          vpsConfigured={!!loadLocal("tapeball:vps_url")}
+          vpsConfigured={true}
           onVpsClick={() => setVpsModalOpen(true)}
         />
       )}
@@ -476,14 +475,14 @@ function Home({ onNew, onWatch, onTournament, vpsConfigured, onVpsClick }) {
     <div className="tb-fadein" style={{ padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Scorer Pro</div>
-        <button onClick={onVpsClick} className="tb-btn" style={{ background: vpsConfigured ? "rgba(111,191,115,0.15)" : C.panel2, border: `1px solid ${vpsConfigured ? C.win : C.panelBorder}`, color: vpsConfigured ? C.win : C.inkFaint, padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-          {vpsConfigured ? "🟢 VPS Sync Active" : "⚙️ Configure VPS Backend"}
+        <button onClick={onVpsClick} className="tb-btn" style={{ background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+          🟢 VPS Connected
         </button>
       </div>
 
       <div style={{ marginTop: 18, marginBottom: 32 }}>
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 54, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>3-TEAM TOURNAMENT<br />& GROUND SCORER</div>
-        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Repo-Hosted Frontend + VPS Permanent Storage Engine.</div>
+        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Vercel Hosted Frontend + VPS SQLite Live Database.</div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -494,12 +493,12 @@ function Home({ onNew, onWatch, onTournament, vpsConfigured, onVpsClick }) {
           ▶ Quick Match
         </BigButton>
         <BigButton onClick={onWatch} style={{ padding: "16px 20px", fontSize: 16, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          📡 Watch Live Match (Code Sync)
+          📡 Watch Live Match (Real-Time Code)
         </BigButton>
       </div>
 
       <div style={{ marginTop: 36, color: C.inkFaint, fontSize: 12, lineHeight: 1.6, padding: 14, background: C.bg2, borderRadius: 12, border: `1px solid ${C.panelBorder}` }}>
-        ⚡ <strong>Architecture</strong>: Hosted on GitHub / Vercel with zero downtime. Connect your VPS backend URL (`http://YOUR_VPS_IP:5000`) so all players' phones sync live score data automatically!
+        ⚡ <strong>Live Multi-Device Sync</strong>: Open this link on any spectator's phone and enter the 4-digit match code to follow live ball-by-ball scores in real time!
       </div>
     </div>
   );
@@ -511,23 +510,19 @@ function VpsConfigModal({ currentUrl, onClose, onSave }) {
   const [statusMsg, setStatusMsg] = useState("");
 
   async function testAndSave() {
-    if (!url.trim()) {
-      onSave("");
-      return;
-    }
     setTesting(true);
     setStatusMsg("Testing connection to VPS...");
     const cleanUrl = url.trim().replace(/\/$/, "");
     try {
-      const res = await fetch(`${cleanUrl}/api/health`);
+      const res = await fetch(`${cleanUrl || ""}/api/health`);
       if (res.ok) {
         setStatusMsg("✅ Connected successfully to VPS Database!");
         setTimeout(() => onSave(cleanUrl), 800);
       } else {
-        setStatusMsg("⚠️ Could not connect. Ensure vps_backend.py is running on port 5000.");
+        setStatusMsg("⚠️ Could not connect. Ensure vps_backend.py is running.");
       }
     } catch (e) {
-      setStatusMsg("❌ Connection failed. Check IP/Port & CORS.");
+      setStatusMsg("❌ Connection failed. Check IP & VPS backend.");
     } finally {
       setTesting(false);
     }
@@ -537,16 +532,13 @@ function VpsConfigModal({ currentUrl, onClose, onSave }) {
     <ModalShell title="VPS Storage API Settings" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
-          <Label>VPS Server URL (e.g. http://123.45.67.89:5000)</Label>
-          <TextInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://YOUR_VPS_IP:5000" style={{ marginTop: 6 }} />
+          <Label>Custom VPS Server URL (optional, defaults to Vercel Proxy)</Label>
+          <TextInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Leave blank for automatic Vercel Proxy" style={{ marginTop: 6 }} />
         </div>
         {statusMsg && <div style={{ fontSize: 13, color: statusMsg.startsWith("✅") ? C.win : C.wicket, fontWeight: 700 }}>{statusMsg}</div>}
         <BigButton onClick={testAndSave} disabled={testing} bg={C.win} color="#0A1F0B" style={{ padding: 14, fontFamily: FONT_DISPLAY, fontSize: 18 }}>
-          Save & Sync with VPS
+          Test & Save Connection
         </BigButton>
-        <div style={{ color: C.inkFaint, fontSize: 12, lineHeight: 1.5 }}>
-          Run <code>python vps_backend.py</code> on your VPS to start the SQLite API storage server.
-        </div>
       </div>
     </ModalShell>
   );
@@ -1370,7 +1362,7 @@ function Watch({ onBack }) {
     return (
       <div className="tb-fadein">
         <BackBar title={`Match ${code}`} onBack={() => setJoined(false)} />
-        <div style={{ padding: 20, color: C.inkDim }}>Searching for live match with code {code}…</div>
+        <div style={{ padding: 20, color: C.inkDim }}>Connecting to live match feed for code {code}…</div>
       </div>
     );
   }
