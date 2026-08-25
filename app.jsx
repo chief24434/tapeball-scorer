@@ -47,7 +47,6 @@ function loadLocal(key) {
 
 async function apiFetch(endpoint, method = 'GET', data = null) {
   const vpsUrl = loadLocal("tapeball:vps_url");
-  // Default to relative /api path (proxied by Vercel server-to-server) or explicit VPS URL
   const baseUrl = vpsUrl ? vpsUrl.replace(/\/$/, "") : "";
   try {
     const options = { method, headers: { 'Content-Type': 'application/json' } };
@@ -79,7 +78,6 @@ function useStorageSync(key, apiPath = null) {
     syncData();
     function handleStorage() { syncData(); }
     window.addEventListener('storage', handleStorage);
-    // Poll every 1 second for fast live match updates across devices
     const interval = setInterval(syncData, 1000);
     return () => {
       window.removeEventListener('storage', handleStorage);
@@ -338,6 +336,18 @@ function App() {
     });
   };
 
+  const handleResetData = async () => {
+    if (!window.confirm("Are you sure you want to reset ALL tournament matches and database storage?")) return;
+    localStorage.clear();
+    await apiFetch("/api/reset", "POST");
+    setMatch(null);
+    setCompletedMatches([]);
+    setTournamentTeams([]);
+    setTournaments({});
+    setScreen("home");
+    alert("All tournament matches and database data have been completely reset!");
+  };
+
   const handleRecordMatchComplete = (m) => {
     const list = completedMatches || [];
     const inn1 = m.innings[0], inn2 = m.innings[1];
@@ -360,7 +370,6 @@ function App() {
     const nextList = [...list.filter((x) => x.id !== rec.id), rec];
     setCompletedMatches(nextList);
 
-    // If part of tournament, update tournament match state
     if (m.tournamentId && tournaments) {
       const tour = tournaments[m.tournamentId];
       if (tour) {
@@ -385,6 +394,7 @@ function App() {
           onTournament={() => setScreen("tournament")}
           vpsConfigured={true}
           onVpsClick={() => setVpsModalOpen(true)}
+          onResetData={handleResetData}
         />
       )}
       {screen === "setup" && (
@@ -461,6 +471,7 @@ function App() {
             setVpsUrlState(url);
             setVpsModalOpen(false);
           }}
+          onResetData={handleResetData}
         />
       )}
     </div>
@@ -470,27 +481,32 @@ function App() {
 /* ---------------------------------------------------------
    HOME SCREEN
 --------------------------------------------------------- */
-function Home({ onNew, onWatch, onTournament, vpsConfigured, onVpsClick }) {
+function Home({ onNew, onWatch, onTournament, vpsConfigured, onVpsClick, onResetData }) {
   return (
     <div className="tb-fadein" style={{ padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Scorer Pro</div>
-        <button onClick={onVpsClick} className="tb-btn" style={{ background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-          🟢 VPS Connected
-        </button>
+        <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Universal Tournament Engine</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={onResetData} className="tb-btn" style={{ background: "rgba(209,75,65,0.15)", border: `1px solid ${C.wicket}`, color: C.wicket, padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            🗑️ Reset Data
+          </button>
+          <button onClick={onVpsClick} className="tb-btn" style={{ background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            🟢 VPS Active
+          </button>
+        </div>
       </div>
 
       <div style={{ marginTop: 18, marginBottom: 32 }}>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 54, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>3-TEAM TOURNAMENT<br />& GROUND SCORER</div>
-        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Vercel Hosted Frontend + VPS SQLite Live Database.</div>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 54, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>ANY TOURNAMENT<br />& GROUND SCORER</div>
+        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Build tournaments for any number of teams, custom rounds & playoffs.</div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <BigButton onClick={onTournament} bg={C.tape} color="#1A1305" style={{ padding: "20px", fontSize: 20, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          🏆 3-Team Tournament System
+          🏆 Universal Tournament Manager
         </BigButton>
         <BigButton onClick={onNew} bg={C.panel2} color={C.ink} style={{ padding: "16px 20px", fontSize: 17, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          ▶ Quick Match
+          ▶ Quick Friendly Match
         </BigButton>
         <BigButton onClick={onWatch} style={{ padding: "16px 20px", fontSize: 16, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
           📡 Watch Live Match (Real-Time Code)
@@ -498,13 +514,13 @@ function Home({ onNew, onWatch, onTournament, vpsConfigured, onVpsClick }) {
       </div>
 
       <div style={{ marginTop: 36, color: C.inkFaint, fontSize: 12, lineHeight: 1.6, padding: 14, background: C.bg2, borderRadius: 12, border: `1px solid ${C.panelBorder}` }}>
-        ⚡ <strong>Live Multi-Device Sync</strong>: Open this link on any spectator's phone and enter the 4-digit match code to follow live ball-by-ball scores in real time!
+        ⚡ <strong>Universal Tournament System</strong>: Create custom tournaments with 2 to 12+ teams, custom round-robin rounds, semifinals, finals, and NRR points tables!
       </div>
     </div>
   );
 }
 
-function VpsConfigModal({ currentUrl, onClose, onSave }) {
+function VpsConfigModal({ currentUrl, onClose, onSave, onResetData }) {
   const [url, setUrl] = useState(currentUrl);
   const [testing, setTesting] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -529,16 +545,21 @@ function VpsConfigModal({ currentUrl, onClose, onSave }) {
   }
 
   return (
-    <ModalShell title="VPS Storage API Settings" onClose={onClose}>
+    <ModalShell title="VPS Storage API & Settings" onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
-          <Label>Custom VPS Server URL (optional, defaults to Vercel Proxy)</Label>
+          <Label>Custom VPS Server URL (optional)</Label>
           <TextInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Leave blank for automatic Vercel Proxy" style={{ marginTop: 6 }} />
         </div>
         {statusMsg && <div style={{ fontSize: 13, color: statusMsg.startsWith("✅") ? C.win : C.wicket, fontWeight: 700 }}>{statusMsg}</div>}
         <BigButton onClick={testAndSave} disabled={testing} bg={C.win} color="#0A1F0B" style={{ padding: 14, fontFamily: FONT_DISPLAY, fontSize: 18 }}>
           Test & Save Connection
         </BigButton>
+        <div style={{ borderTop: `1px solid ${C.panelBorder}`, pt: 10, marginTop: 10 }}>
+          <BigButton onClick={onResetData} bg={C.wicket} color="#fff" style={{ width: "100%", padding: 12, fontFamily: FONT_DISPLAY, fontSize: 16 }}>
+            🗑️ Clear All Matches & Reset VPS Database
+          </BigButton>
+        </div>
       </div>
     </ModalShell>
   );
@@ -723,11 +744,11 @@ function Setup({ tournamentTeams, onCancel, onStart }) {
 --------------------------------------------------------- */
 function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, onExit }) {
   const inn = match.innings[match.currentInningsIdx];
-  const [extraMode, setExtraMode] = useState(null); // 'wd' | 'nb' | 'b' | 'lb'
+  const [extraMode, setExtraMode] = useState(null);
   const [wicketOpen, setWicketOpen] = useState(false);
   const [bowlerModal, setBowlerModal] = useState(() => !inn.currentBowler);
-  const [newBatModal, setNewBatModal] = useState(null); // dismissal details pending new batsman
-  const [tab, setTab] = useState("score"); // score | card
+  const [newBatModal, setNewBatModal] = useState(null);
+  const [tab, setTab] = useState("score");
 
   const availableNewBatsmen = inn.battingPlayers.filter((p) => !inn.order.includes(p));
   const availableBowlers = inn.bowlingPlayers.filter((p) => p !== inn.prevBowler);
@@ -1396,7 +1417,7 @@ function Watch({ onBack }) {
 }
 
 /* ===========================================================
-   TOURNAMENT MANAGEMENT SYSTEM (3 TEAMS, 2 ROUNDS + FINAL)
+   UNIVERSAL DYNAMIC TOURNAMENT SYSTEM (ANY TEAMS & ROUNDS)
 =========================================================== */
 function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch, onNewTournament }) {
   const [activeTourId, setActiveTourId] = useState(() => {
@@ -1410,11 +1431,11 @@ function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch,
   if (!tournament) {
     return (
       <div className="tb-fadein">
-        <BackBar title="Tournament Manager" onBack={onBack} />
+        <BackBar title="Universal Tournament Manager" onBack={onBack} />
         <div style={{ padding: 20, textAlign: "center" }}>
-          <div style={{ color: C.inkDim, marginBottom: 20 }}>No active tournament found. Create a 3-Team 2-Round tournament to begin!</div>
+          <div style={{ color: C.inkDim, marginBottom: 20 }}>No active tournament found. Create a tournament for any number of teams & rounds!</div>
           <BigButton onClick={onNewTournament} bg={C.tape} color="#1A1305" style={{ padding: 16, width: "100%", fontFamily: FONT_DISPLAY, fontSize: 20 }}>
-            + Create New 3-Team Tournament
+            + Create New Custom Tournament
           </BigButton>
         </div>
       </div>
@@ -1445,7 +1466,7 @@ function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch,
       {tab === "standings" && (
         <div style={{ padding: "0 16px 16px" }}>
           <Panel style={{ padding: 14, marginBottom: 14 }}>
-            <Label>3-Team Group Standings (Win=2, Tie=1, Loss=0)</Label>
+            <Label>{tournament.teamNames?.length || 0}-Team Group Standings (Win=2, Tie=1, Loss=0)</Label>
             <table style={{ width: "100%", marginTop: 10, borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 13 }}>
               <thead>
                 <tr style={{ color: C.inkFaint, textAlign: "left", fontSize: 11 }}>
@@ -1496,10 +1517,10 @@ function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch,
           {tournament.matches.map((m) => {
             const isCompleted = m.status === "done";
             return (
-              <Panel key={m.id} style={{ padding: 14, borderColor: m.isFinal ? C.tape : C.panelBorder }}>
+              <Panel key={m.id} style={{ padding: 14, borderColor: m.isPlayoff ? C.tape : C.panelBorder }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <div style={{ fontFamily: FONT_BODY, fontSize: 11, color: m.isFinal ? C.tape : C.inkFaint, fontWeight: 800, textTransform: "uppercase" }}>
-                    {m.isFinal ? "🏆 FINAL MATCH" : `Round ${m.round} · Match ${m.matchNum}`}
+                  <div style={{ fontFamily: FONT_BODY, fontSize: 11, color: m.isPlayoff ? C.tape : C.inkFaint, fontWeight: 800, textTransform: "uppercase" }}>
+                    {m.isPlayoff ? `🏆 ${m.stageName || "PLAYOFF"}` : `Round ${m.round} · Match ${m.matchNum}`}
                   </div>
                   {isCompleted ? (
                     <span style={{ color: C.win, fontSize: 11, fontWeight: 800 }}>✓ COMPLETED</span>
@@ -1520,8 +1541,8 @@ function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch,
                       const matchConfig = prepareTournamentMatch(tournament, m);
                       onLaunchMatch(matchConfig);
                     }}
-                    bg={m.isFinal ? C.win : C.tape}
-                    color={m.isFinal ? "#0A1F0B" : "#1A1305"}
+                    bg={m.isPlayoff ? C.win : C.tape}
+                    color={m.isPlayoff ? "#0A1F0B" : "#1A1305"}
                     style={{ marginTop: 10, width: "100%", padding: 12, fontFamily: FONT_DISPLAY, fontSize: 18 }}
                   >
                     Start Match ▶
@@ -1617,46 +1638,61 @@ function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch,
 }
 
 /* ---------------------------------------------------------
-   CREATE 3-TEAM 2-ROUND TOURNAMENT WIZARD
+   CREATE UNIVERSAL DYNAMIC TOURNAMENT WIZARD
 --------------------------------------------------------- */
 function TournamentSetup({ tournaments, setTournaments, onCancel, onCreated }) {
-  const [tourName, setTourName] = useState("Tapeball Super League 2026");
+  const [tourName, setTourName] = useState("Tapeball Premier League 2026");
   const [overs, setOvers] = useState("8");
-  const [teamA, setTeamA] = useState("Saddam XI");
-  const [teamB, setTeamB] = useState("Arbaz XI");
-  const [teamC, setTeamC] = useState("Zain XI");
+  const [numTeams, setNumTeams] = useState(3);
+  const [numRounds, setNumRounds] = useState(2); // 1 Round or 2 Rounds or more
+  const [playoffType, setPlayoffType] = useState("top2_final"); // "top2_final" | "top4_semis"
 
-  const [playersA, setPlayersA] = useState("Saddam, Ali, Bilal, Hamza, Usman, Fahad");
-  const [playersB, setPlayersB] = useState("Arbaz, Ahmed, Danish, Kashif, Salman, Waqas");
-  const [playersC, setPlayersC] = useState("Zain, Rashid, Imran, Kamran, Tariq, Rizwan");
+  const [teamsData, setTeamsData] = useState([
+    { name: "Saddam XI", roster: "Saddam, Ali, Bilal, Hamza, Usman, Fahad" },
+    { name: "Arbaz XI", roster: "Arbaz, Ahmed, Danish, Kashif, Salman, Waqas" },
+    { name: "Zain XI", roster: "Zain, Rashid, Imran, Kamran, Tariq, Rizwan" },
+    { name: "Fahad XI", roster: "Fahad, Haris, Shoaib, Noman, Bilal, Yasir" },
+  ]);
+
+  const activeTeams = teamsData.slice(0, numTeams);
+
+  function updateTeamName(idx, val) {
+    const next = [...teamsData];
+    if (!next[idx]) next[idx] = { name: "", roster: "" };
+    next[idx].name = val;
+    setTeamsData(next);
+  }
+
+  function updateTeamRoster(idx, val) {
+    const next = [...teamsData];
+    if (!next[idx]) next[idx] = { name: "", roster: "" };
+    next[idx].roster = val;
+    setTeamsData(next);
+  }
 
   function createTournament() {
-    const listA = playersA.split(",").map((s) => s.trim()).filter(Boolean);
-    const listB = playersB.split(",").map((s) => s.trim()).filter(Boolean);
-    const listC = playersC.split(",").map((s) => s.trim()).filter(Boolean);
-
     const tourId = "tour-" + Date.now();
+    const teamMap = {};
+    const teamNameList = [];
 
-    const matches = [
-      { id: "m1", matchNum: 1, round: 1, teamA, teamB, status: "pending" },
-      { id: "m2", matchNum: 2, round: 1, teamB, teamC, status: "pending" },
-      { id: "m3", matchNum: 3, round: 1, teamC, teamA, status: "pending" },
-      { id: "m4", matchNum: 4, round: 2, teamA, teamB, status: "pending" },
-      { id: "m5", matchNum: 5, round: 2, teamB, teamC, status: "pending" },
-      { id: "m6", matchNum: 6, round: 2, teamC, teamA, status: "pending" },
-      { id: "m7", matchNum: 7, round: 3, isFinal: true, teamA: "Top Team 1", teamB: "Top Team 2", status: "pending" },
-    ];
+    activeTeams.forEach((t, i) => {
+      const tName = t.name.trim() || `Team ${i + 1}`;
+      const rList = t.roster.split(",").map((s) => s.trim()).filter(Boolean);
+      teamMap[tName] = rList.length > 0 ? rList : [`Player 1`, `Player 2`, `Player 3`, `Player 4`];
+      teamNameList.push(tName);
+    });
+
+    // GENERATE DYNAMIC ROUND-ROBIN FIXTURES
+    const matches = generateRoundRobinFixtures(teamNameList, Number(numRounds), playoffType);
 
     const tournamentData = {
       id: tourId,
       name: tourName,
       oversLimit: Number(overs),
-      teams: {
-        [teamA]: listA,
-        [teamB]: listB,
-        [teamC]: listC,
-      },
-      teamNames: [teamA, teamB, teamC],
+      teams: teamMap,
+      teamNames: teamNameList,
+      numRounds: Number(numRounds),
+      playoffType,
       matches,
       createdAt: Date.now(),
     };
@@ -1670,41 +1706,118 @@ function TournamentSetup({ tournaments, setTournaments, onCancel, onCreated }) {
 
   return (
     <div className="tb-fadein">
-      <BackBar title="Create 3-Team Tournament" onBack={onCancel} />
+      <BackBar title="Create Custom Tournament" onBack={onCancel} />
       <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
           <Label>Tournament Name</Label>
           <TextInput value={tourName} onChange={(e) => setTourName(e.target.value)} style={{ marginTop: 6 }} />
         </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>
+            <Label>Number of Teams</Label>
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              {[2, 3, 4, 5, 6].map((n) => (
+                <Chip key={n} active={numTeams === n} onClick={() => setNumTeams(n)}>{n}</Chip>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label>Group Rounds</Label>
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              {[1, 2, 3].map((r) => (
+                <Chip key={r} active={numRounds === r} onClick={() => setNumRounds(r)}>{r} Rd</Chip>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <Label>Playoff Format</Label>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <Chip active={playoffType === "top2_final"} onClick={() => setPlayoffType("top2_final")}>Top 2 ➔ Direct Final</Chip>
+            {numTeams >= 4 && (
+              <Chip active={playoffType === "top4_semis"} onClick={() => setPlayoffType("top4_semis")}>Top 4 ➔ Semis & Final</Chip>
+            )}
+          </div>
+        </div>
+
         <div>
           <Label>Overs Per Match</Label>
           <TextInput type="number" value={overs} onChange={(e) => setOvers(e.target.value)} style={{ marginTop: 6 }} />
         </div>
 
-        <Panel style={{ padding: 14 }}>
-          <Label>Team 1 Name & Roster</Label>
-          <TextInput value={teamA} onChange={(e) => setTeamA(e.target.value)} style={{ marginTop: 6, marginBottom: 8 }} />
-          <textarea value={playersA} onChange={(e) => setPlayersA(e.target.value)} rows={3} style={{ width: "100%", background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 10, color: C.ink, fontFamily: FONT_BODY, fontSize: 14 }} />
-        </Panel>
-
-        <Panel style={{ padding: 14 }}>
-          <Label>Team 2 Name & Roster</Label>
-          <TextInput value={teamB} onChange={(e) => setTeamB(e.target.value)} style={{ marginTop: 6, marginBottom: 8 }} />
-          <textarea value={playersB} onChange={(e) => setPlayersB(e.target.value)} rows={3} style={{ width: "100%", background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 10, color: C.ink, fontFamily: FONT_BODY, fontSize: 14 }} />
-        </Panel>
-
-        <Panel style={{ padding: 14 }}>
-          <Label>Team 3 Name & Roster</Label>
-          <TextInput value={teamC} onChange={(e) => setTeamC(e.target.value)} style={{ marginTop: 6, marginBottom: 8 }} />
-          <textarea value={playersC} onChange={(e) => setPlayersC(e.target.value)} rows={3} style={{ width: "100%", background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 10, color: C.ink, fontFamily: FONT_BODY, fontSize: 14 }} />
-        </Panel>
+        <Label>Team Names & Rosters</Label>
+        {activeTeams.map((t, idx) => (
+          <Panel key={idx} style={{ padding: 14 }}>
+            <Label>Team {idx + 1} Name</Label>
+            <TextInput value={t.name} onChange={(e) => updateTeamName(idx, e.target.value)} placeholder={`e.g. Team ${idx + 1}`} style={{ marginTop: 6, marginBottom: 8 }} />
+            <Label>Roster (comma separated)</Label>
+            <textarea value={t.roster} onChange={(e) => updateTeamRoster(idx, e.target.value)} rows={2} style={{ width: "100%", background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 10, color: C.ink, fontFamily: FONT_BODY, fontSize: 14 }} />
+          </Panel>
+        ))}
 
         <BigButton onClick={createTournament} bg={C.win} color="#0A1F0B" style={{ padding: 16, width: "100%", fontFamily: FONT_DISPLAY, fontSize: 20 }}>
-          Generate Tournament Schedule ▶
+          Generate Dynamic Tournament Schedule ▶
         </BigButton>
       </div>
     </div>
   );
+}
+
+/* ---------------------------------------------------------
+   DYNAMIC ROUND-ROBIN FIXTURE ALGORITHM
+--------------------------------------------------------- */
+function generateRoundRobinFixtures(teams, numRounds, playoffType) {
+  const matches = [];
+  let matchNum = 1;
+  const nList = [...teams];
+  if (nList.length % 2 !== 0) nList.push("BYE");
+
+  const numTeams = nList.length;
+  const roundsInCycle = numTeams - 1;
+
+  for (let cycle = 1; cycle <= numRounds; cycle++) {
+    let currentRotation = [...nList];
+    for (let r = 0; r < roundsInCycle; r++) {
+      for (let i = 0; i < numTeams / 2; i++) {
+        const team1 = currentRotation[i];
+        const team2 = currentRotation[numTeams - 1 - i];
+        if (team1 !== "BYE" && team2 !== "BYE") {
+          // Swap home/away alternate cycles
+          const isEvenCycle = cycle % 2 === 0;
+          matches.push({
+            id: `m-${matchNum}`,
+            matchNum,
+            round: cycle,
+            teamA: isEvenCycle ? team2 : team1,
+            teamB: isEvenCycle ? team1 : team2,
+            status: "pending",
+            isPlayoff: false,
+          });
+          matchNum++;
+        }
+      }
+      // Rotate array fixing first element
+      const fixed = currentRotation[0];
+      const rest = currentRotation.slice(1);
+      rest.unshift(rest.pop());
+      currentRotation = [fixed, ...rest];
+    }
+  }
+
+  // PLAYOFF MATCHES
+  if (playoffType === "top4_semis" && teams.length >= 4) {
+    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 1, teamA: "Rank 1", teamB: "Rank 4", status: "pending", isPlayoff: true, stageName: "SEMI-FINAL 1" });
+    matchNum++;
+    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 1, teamA: "Rank 2", teamB: "Rank 3", status: "pending", isPlayoff: true, stageName: "SEMI-FINAL 2" });
+    matchNum++;
+    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 2, teamA: "Winner Semi 1", teamB: "Winner Semi 2", status: "pending", isPlayoff: true, stageName: "FINAL MATCH" });
+  } else {
+    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 1, teamA: "Rank 1", teamB: "Rank 2", status: "pending", isPlayoff: true, stageName: "FINAL MATCH" });
+  }
+
+  return matches;
 }
 
 /* ---------------------------------------------------------
@@ -1718,7 +1831,7 @@ function calculateTournamentStandings(tour) {
     stats[t] = { team: t, played: 0, won: 0, lost: 0, tied: 0, pts: 0, runsScored: 0, ballsFaced: 0, runsConceded: 0, ballsBowled: 0, nrr: 0 };
   });
 
-  tour.matches.forEach((m) => {
+  (tour.matches || []).forEach((m) => {
     if (m.status !== "done" || !m.innings || m.innings.length < 1) return;
     const inn1 = m.innings[0], inn2 = m.innings[1];
     if (!inn1) return;
@@ -1770,7 +1883,7 @@ function calculateTournamentStandings(tour) {
 
 function calculateQualificationStatus(tour, standings) {
   const result = {};
-  const groupMatches = tour.matches.filter((m) => !m.isFinal);
+  const groupMatches = (tour.matches || []).filter((m) => !m.isPlayoff);
   const remainingMatches = groupMatches.filter((m) => m.status !== "done").length;
 
   standings.forEach((s) => {
@@ -1780,14 +1893,15 @@ function calculateQualificationStatus(tour, standings) {
   });
 
   if (remainingMatches === 0) {
+    const targetQual = tour.playoffType === "top4_semis" ? 4 : 2;
     standings.forEach((s, idx) => {
-      if (idx < 2) {
-        result[s.team] = { status: "QUALIFIED", note: "Secured Final spot" };
+      if (idx < targetQual) {
+        result[s.team] = { status: "QUALIFIED", note: "Secured Playoff spot" };
       } else {
         result[s.team] = { status: "ELIMINATED", note: "Eliminated from tournament" };
       }
     });
-  } else if (standings.length >= 3) {
+  } else if (standings.length >= 3 && tour.playoffType === "top2_final") {
     const team2Pts = standings[1] ? standings[1].pts : 0;
     const team3MaxPts = result[standings[2].team] ? result[standings[2].team].maxAchievablePts : 0;
 
@@ -1807,10 +1921,23 @@ function prepareTournamentMatch(tour, matchObj) {
   let teamA = matchObj.teamA;
   let teamB = matchObj.teamB;
 
-  if (matchObj.isFinal) {
+  if (matchObj.isPlayoff) {
     const standings = calculateTournamentStandings(tour);
-    teamA = standings[0] ? standings[0].team : "Team A";
-    teamB = standings[1] ? standings[1].team : "Team B";
+    if (matchObj.stageName === "SEMI-FINAL 1") {
+      teamA = standings[0] ? standings[0].team : "Rank 1";
+      teamB = standings[3] ? standings[3].team : "Rank 4";
+    } else if (matchObj.stageName === "SEMI-FINAL 2") {
+      teamA = standings[1] ? standings[1].team : "Rank 2";
+      teamB = standings[2] ? standings[2].team : "Rank 3";
+    } else if (matchObj.stageName === "FINAL MATCH" && tour.playoffType === "top4_semis") {
+      const sf1 = tour.matches.find((x) => x.stageName === "SEMI-FINAL 1");
+      const sf2 = tour.matches.find((x) => x.stageName === "SEMI-FINAL 2");
+      teamA = sf1 && sf1.winner ? sf1.winner : "Winner Semi 1";
+      teamB = sf2 && sf2.winner ? sf2.winner : "Winner Semi 2";
+    } else if (matchObj.stageName === "FINAL MATCH") {
+      teamA = standings[0] ? standings[0].team : "Rank 1";
+      teamB = standings[1] ? standings[1].team : "Rank 2";
+    }
   }
 
   const playersA = tour.teams[teamA] || ["Player 1", "Player 2", "Player 3", "Player 4"];
@@ -1845,7 +1972,7 @@ function calculatePlayerLeaderboards(tour) {
   const batsmen = {};
   const bowlers = {};
 
-  tour.matches.forEach((m) => {
+  (tour.matches || []).forEach((m) => {
     if (m.status !== "done" || !m.innings) return;
 
     m.innings.forEach((inn) => {

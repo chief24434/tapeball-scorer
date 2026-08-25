@@ -69,13 +69,20 @@ class VPSAPIHandler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length).decode('utf-8')
+        body = self.rfile.read(content_length).decode('utf-8') if content_length > 0 else "{}"
         data = json.loads(body) if body else {}
 
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
 
-        if self.path == '/api/tournaments':
+        if self.path == '/api/reset':
+            c.execute("DELETE FROM tournaments")
+            c.execute("DELETE FROM matches")
+            c.execute("DELETE FROM completed_matches")
+            c.execute("DELETE FROM teams")
+            conn.commit()
+            self.send_json({"status": "cleared", "message": "All database matches and tournaments reset successfully."})
+        elif self.path == '/api/tournaments':
             tour_id = data.get('id')
             if tour_id:
                 c.execute("INSERT OR REPLACE INTO tournaments (id, data) VALUES (?, ?)", (tour_id, json.dumps(data)))
@@ -89,7 +96,7 @@ class VPSAPIHandler(http.server.BaseHTTPRequestHandler):
             conn.commit()
             self.send_json({"status": "saved", "code": code})
         elif self.path == '/api/completed-matches':
-            match_id = data.get('id', str(Date.now() if 'Date' in globals() else 1))
+            match_id = data.get('id', 'm-' + str(os.urandom(4).hex()))
             c.execute("INSERT OR REPLACE INTO completed_matches (id, data) VALUES (?, ?)", (match_id, json.dumps(data)))
             conn.commit()
             self.send_json({"status": "saved", "id": match_id})
@@ -114,14 +121,15 @@ class VPSAPIHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 print(f"====================================================")
-print(f" Tapeball VPS API Storage Server Started")
+print(f" Tapeball VPS API Storage Server Started (With Reset Support)")
 print(f" Port: {PORT}")
 print(f" Database: {DB_FILE}")
 print(f" CORS Enabled for GitHub / Vercel Hosting")
 print(f"====================================================")
 
-with socketserver.TCPServer(("", PORT), VPSAPIHandler) as httpd:
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer stopped.")
+if __name__ == '__main__':
+    with socketserver.TCPServer(("", PORT), VPSAPIHandler) as httpd:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nServer stopped.")
