@@ -133,6 +133,7 @@ function newInnings(battingTeam, bowlingTeam, battingPlayers = [], bowlingPlayer
     target: target || null,
     batsmen: {}, bowlers: {},
     order: [],
+    completedOvers: [],
     striker: null, nonStriker: null, currentBowler: null, prevBowler: null,
     score: 0, wkts: 0, legalBalls: 0,
     curOverRuns: 0, curOverWkts: 0,
@@ -391,8 +392,8 @@ function Home({ onNew, onWatch }) {
     <div className="tb-fadein" style={{ padding: 20 }}>
       <div style={{ marginTop: 24, marginBottom: 32 }}>
         <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>FAST MATCH<br />SCORECARD</div>
-        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Simple one-tap scoring for live ground matches.</div>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>PRO GROUND<br />SCORECARD</div>
+        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>One-tap scoring, batsman swap, over history & retired batsman support.</div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -509,14 +510,24 @@ function Setup({ onCancel, onStart }) {
 }
 
 /* ---------------------------------------------------------
-   LIVE SCORER (ONE-TAP WIDE, STREAMLINED WICKETS)
+   LIVE SCORER (SWAP BATSMAN, OVER HISTORY, RETIRED BATSMAN)
 --------------------------------------------------------- */
 function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, onExit }) {
   const inn = match.innings[match.currentInningsIdx];
   const [wicketOpen, setWicketOpen] = useState(false);
   const [bowlerModal, setBowlerModal] = useState(() => !inn.currentBowler);
   const [newBatModal, setNewBatModal] = useState(null);
-  const [tab, setTab] = useState("score");
+  const [tab, setTab] = useState("score"); // score | history | card
+
+  // Manual Striker Swap
+  function handleSwapStriker() {
+    const m2 = structuredClone(match);
+    const inn2 = m2.innings[m2.currentInningsIdx];
+    const temp = inn2.striker;
+    inn2.striker = inn2.nonStriker;
+    inn2.nonStriker = temp;
+    setMatch(m2);
+  }
 
   function checkInningsEnd(m2, inn2) {
     const oversDone = inn2.legalBalls >= inn2.oversLimit * 6;
@@ -551,6 +562,17 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
       inn2.bowlers[inn2.currentBowler].overLog = inn2.bowlers[inn2.currentBowler].overLog || [];
       inn2.bowlers[inn2.currentBowler].overLog.push({ runs: inn2.curOverRuns, wkts: inn2.curOverWkts });
     }
+
+    // Save past over history log
+    inn2.completedOvers = inn2.completedOvers || [];
+    inn2.completedOvers.push({
+      overNum: Math.floor(inn2.legalBalls / 6),
+      bowler: inn2.currentBowler,
+      runs: inn2.curOverRuns,
+      wkts: inn2.curOverWkts,
+      balls: [...inn2.currentOverBalls],
+    });
+
     inn2.curOverRuns = 0;
     inn2.curOverWkts = 0;
     inn2.currentOverBalls = [];
@@ -605,7 +627,7 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     setMatch(m3);
   }
 
-  // ONE-TAP WIDE / NO-BALL (ZERO POPUPS!)
+  // ONE-TAP WIDE / NO-BALL
   function applyExtra(kind) {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
@@ -651,25 +673,35 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     if (bat) {
       bat.out = true;
       bat.how = type;
-      if (type !== "run out") { bat.bowler = inn2.currentBowler; }
-      bat.balls += type === "run out" ? 0 : 1;
+      if (type !== "run out" && type !== "retired") { bat.bowler = inn2.currentBowler; }
+      if (type !== "retired") bat.balls += type === "run out" ? 0 : 1;
     }
 
-    if (type !== "run out" && bowl) {
+    if (type !== "run out" && type !== "retired" && bowl) {
       bowl.wkts += 1;
       bowl.balls += 1;
     } else if (bowl && type === "run out") {
       bowl.balls += 1;
     }
 
-    inn2.legalBalls += 1;
-    inn2.wkts += 1;
-    inn2.curOverWkts += 1;
-    inn2.currentOverBalls.push({ type: "wicket", label: "W" });
+    if (type !== "retired") {
+      inn2.legalBalls += 1;
+      inn2.wkts += 1;
+      inn2.curOverWkts += 1;
+      inn2.currentOverBalls.push({ type: "wicket", label: "W" });
+    }
     inn2.freeHit = false;
 
     if (newBatsman) {
-      inn2.batsmen[newBatsman] = inn2.batsmen[newBatsman] || emptyBatsman(newBatsman);
+      // Check if this new batsman was previously retired
+      if (inn2.batsmen[newBatsman] && inn2.batsmen[newBatsman].how === "retired") {
+        // Bring back retired batsman!
+        inn2.batsmen[newBatsman].out = false;
+        inn2.batsmen[newBatsman].how = "";
+      } else {
+        inn2.batsmen[newBatsman] = inn2.batsmen[newBatsman] || emptyBatsman(newBatsman);
+      }
+
       if (!inn2.battingPlayers.includes(newBatsman)) inn2.battingPlayers.push(newBatsman);
       if (!inn2.order.includes(newBatsman)) inn2.order.push(newBatsman);
       if (whoOut === "striker") inn2.striker = newBatsman;
@@ -691,7 +723,7 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
       else { onMatchDone(m3); return; }
     }
 
-    if (inn2.legalBalls % 6 === 0) {
+    if (type !== "retired" && inn2.legalBalls % 6 === 0) {
       finishOver(m3, inn2);
       setMatch(m3);
       setBowlerModal(true);
@@ -714,6 +746,10 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
   const bat2 = inn.nonStriker ? inn.batsmen[inn.nonStriker] : null;
   const bowl = inn.currentBowler ? inn.bowlers[inn.currentBowler] : null;
 
+  // Retired batsmen available to come back out
+  const retiredBatsmen = (inn.order || []).filter((n) => inn.batsmen[n] && inn.batsmen[n].how === "retired");
+  const unbattedPlayers = inn.battingPlayers.filter((p) => !inn.order.includes(p));
+
   return (
     <div className="tb-fadein">
       <BackBar title={`${match.teamA} vs ${match.teamB}`} onBack={onExit}
@@ -727,15 +763,22 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
 
       <div style={{ display: "flex", gap: 6, padding: "0 16px 10px" }}>
         <Chip active={tab === "score"} onClick={() => setTab("score")}>Scoreboard</Chip>
+        <Chip active={tab === "history"} onClick={() => setTab("history")}>Over History ({inn.completedOvers?.length || 0})</Chip>
         <Chip active={tab === "card"} onClick={() => setTab("card")}>Full Scorecard</Chip>
       </div>
 
       {tab === "score" && (
         <div style={{ padding: "0 16px" }}>
           <Panel style={{ padding: 14, marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <Label>Active Batsmen</Label>
+              <button onClick={handleSwapStriker} className="tb-btn" style={{ background: C.panel2, border: `1px solid ${C.tape}`, color: C.tape, padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                ⇄ Swap Striker
+              </button>
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT_MONO, fontSize: 14 }}>
               <div>
-                <div style={{ color: C.tape }}>
+                <div style={{ color: C.tape, fontWeight: 700 }}>
                   ● {bat1 ? bat1.name : "—"} <span style={{ color: C.inkDim }}>{bat1 ? `${bat1.runs}(${bat1.balls})` : ""}</span>
                 </div>
                 <div style={{ color: C.inkDim }}>
@@ -781,6 +824,28 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
         </div>
       )}
 
+      {tab === "history" && (
+        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <Label>Completed Overs Breakdown</Label>
+          {(inn.completedOvers || []).slice().reverse().map((ov, idx) => (
+            <Panel key={idx} style={{ padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ fontFamily: FONT_BODY, fontSize: 13, fontWeight: 800, color: C.tape }}>
+                  Over {ov.overNum} — Bowler: {ov.bowler}
+                </div>
+                <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.inkDim }}>
+                  {ov.runs} runs · {ov.wkts} wkts
+                </div>
+              </div>
+              <OverDots balls={ov.balls || []} />
+            </Panel>
+          ))}
+          {(!inn.completedOvers || inn.completedOvers.length === 0) && (
+            <div style={{ color: C.inkDim, padding: 20 }}>No overs completed yet in this innings.</div>
+          )}
+        </div>
+      )}
+
       {tab === "card" && <Scorecard inn={inn} />}
 
       {wicketOpen && (
@@ -789,7 +854,6 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
           striker={inn.striker} nonStriker={inn.nonStriker}
           onClose={() => setWicketOpen(false)}
           onConfirm={(dismissalData) => {
-            // Immediately open next batsman picker
             setNewBatModal(dismissalData);
           }}
         />
@@ -797,7 +861,8 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
 
       {newBatModal && (
         <NewBatsmanModal
-          existingPlayers={inn.battingPlayers.filter(p => !inn.order.includes(p))}
+          retiredBatsmen={retiredBatsmen}
+          unbattedPlayers={unbattedPlayers}
           onConfirm={(name) => applyWicket({ ...newBatModal, newBatsman: name })}
           onClose={() => setNewBatModal(null)}
         />
@@ -837,7 +902,9 @@ function Scorecard({ inn }) {
                 <tr key={n} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
                   <td style={{ padding: "6px 0", color: C.ink }}>
                     {b.name}{isCurrent ? " *" : ""}
-                    <div style={{ color: C.inkFaint, fontSize: 10 }}>{b.out ? `${b.how}` : "not out"}</div>
+                    <div style={{ color: b.how === "retired" ? C.tape : C.inkFaint, fontSize: 10 }}>
+                      {b.out ? (b.how === "retired" ? "retired" : b.how) : "not out"}
+                    </div>
                   </td>
                   <td>{b.runs}</td><td>{b.balls}</td><td>{b.fours}</td><td>{b.sixes}</td><td>{strikeRate(b.runs, b.balls)}</td>
                 </tr>
@@ -876,17 +943,18 @@ function Scorecard({ inn }) {
   );
 }
 
-/* STREAMLINED WICKET MODAL (NO RUN PROMPTS FOR BOWLED/CAUGHT/LBW/STUMPED) */
+/* WICKET MODAL WITH RETIRED BATSMAN OPTION */
 function WicketModal({ isFreeHit, striker, nonStriker, onClose, onConfirm }) {
   const [type, setType] = useState(isFreeHit ? "run out" : "bowled");
   const [whoOut, setWhoOut] = useState("striker");
   const [runsCompleted, setRunsCompleted] = useState(0);
 
-  const types = isFreeHit ? ["run out"] : ["bowled", "caught", "lbw", "run out", "stumped"];
+  const types = isFreeHit ? ["run out"] : ["bowled", "caught", "lbw", "run out", "stumped", "retired"];
 
   function handleDismissalClick(t) {
-    if (t !== "run out") {
-      // INSTANTLY CONFIRM DISMISSAL WITH 0 RUNS
+    if (t === "retired") {
+      onConfirm({ type: "retired", whoOut: "striker", runsCompleted: 0 });
+    } else if (t !== "run out") {
       onConfirm({ type: t, whoOut: "striker", runsCompleted: 0 });
     } else {
       setType("run out");
@@ -932,8 +1000,8 @@ function WicketModal({ isFreeHit, striker, nonStriker, onClose, onConfirm }) {
   );
 }
 
-/* DYNAMIC NEW BATSMAN MODAL (ADD ONE-BY-ONE) */
-function NewBatsmanModal({ existingPlayers = [], onConfirm, onClose }) {
+/* DYNAMIC NEW BATSMAN MODAL WITH RETIRED BATSMEN RECALL */
+function NewBatsmanModal({ retiredBatsmen = [], unbattedPlayers = [], onConfirm, onClose }) {
   const [customName, setCustomName] = useState("");
 
   function handleAddCustom() {
@@ -944,12 +1012,25 @@ function NewBatsmanModal({ existingPlayers = [], onConfirm, onClose }) {
 
   return (
     <ModalShell title="Select Next Batsman" onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {existingPlayers.length > 0 && (
-          <div>
-            <Label>Select Existing Player</Label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {retiredBatsmen.length > 0 && (
+          <Panel style={{ padding: 12, borderColor: C.tape }}>
+            <Label>🔄 Bring Back Retired Batsman</Label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
-              {existingPlayers.map((p) => (
+              {retiredBatsmen.map((p) => (
+                <BigButton key={p} onClick={() => onConfirm(p)} bg="rgba(242,169,59,0.15)" color={C.tape} style={{ padding: 12, textAlign: "left", fontSize: 15 }}>
+                  ↪ Resume {p}
+                </BigButton>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {unbattedPlayers.length > 0 && (
+          <div>
+            <Label>Select Unbatted Player</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+              {unbattedPlayers.map((p) => (
                 <BigButton key={p} onClick={() => onConfirm(p)} bg={C.panel2} style={{ padding: 12, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
               ))}
             </div>
