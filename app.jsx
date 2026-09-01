@@ -390,7 +390,7 @@ function Home({ onNew, onWatch }) {
   const [history] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
   return (
     <div className="tb-fadein" style={{ padding: 20 }}>
-      <div style={{ marginTop: 24, marginBottom: 32 }}>
+      <div style={{ marginTop: 14, marginBottom: 32 }}>
         <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>PRO GROUND<br />SCORECARD</div>
         <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>One-tap scoring, batsman swap, over history & retired batsman support.</div>
@@ -517,9 +517,8 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
   const [wicketOpen, setWicketOpen] = useState(false);
   const [bowlerModal, setBowlerModal] = useState(() => !inn.currentBowler);
   const [newBatModal, setNewBatModal] = useState(null);
-  const [tab, setTab] = useState("score"); // score | history | card
+  const [tab, setTab] = useState("score");
 
-  // Manual Striker Swap
   function handleSwapStriker() {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
@@ -563,7 +562,6 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
       inn2.bowlers[inn2.currentBowler].overLog.push({ runs: inn2.curOverRuns, wkts: inn2.curOverWkts });
     }
 
-    // Save past over history log
     inn2.completedOvers = inn2.completedOvers || [];
     inn2.completedOvers.push({
       overNum: Math.floor(inn2.legalBalls / 6),
@@ -627,7 +625,6 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     setMatch(m3);
   }
 
-  // ONE-TAP WIDE / NO-BALL
   function applyExtra(kind) {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
@@ -693,9 +690,7 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     inn2.freeHit = false;
 
     if (newBatsman) {
-      // Check if this new batsman was previously retired
       if (inn2.batsmen[newBatsman] && inn2.batsmen[newBatsman].how === "retired") {
-        // Bring back retired batsman!
         inn2.batsmen[newBatsman].out = false;
         inn2.batsmen[newBatsman].how = "";
       } else {
@@ -746,7 +741,6 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
   const bat2 = inn.nonStriker ? inn.batsmen[inn.nonStriker] : null;
   const bowl = inn.currentBowler ? inn.bowlers[inn.currentBowler] : null;
 
-  // Retired batsmen available to come back out
   const retiredBatsmen = (inn.order || []).filter((n) => inn.batsmen[n] && inn.batsmen[n].how === "retired");
   const unbattedPlayers = inn.battingPlayers.filter((p) => !inn.order.includes(p));
 

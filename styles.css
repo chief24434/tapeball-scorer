@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------
-   TAPEBALL GROUND SCORER & TOURNAMENT SYSTEM STYLES
+   TAPEBALL GROUND SCORER STYLES (WITH NOTCH & SAFE AREA FIX)
 --------------------------------------------------------- */
 
 :root {
@@ -34,6 +34,9 @@ body {
   -webkit-tap-highlight-color: transparent;
   min-height: 100vh;
   overflow-x: hidden;
+  /* Top padding ensures screen starts cleanly below phone status bar / camera notch */
+  padding-top: max(16px, env(safe-area-inset-top, 24px));
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
 }
 
 .tb-btn {
@@ -85,41 +88,4 @@ input, select, textarea {
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--tape) !important;
-}
-
-.badge-qual {
-  background: rgba(111, 191, 115, 0.15);
-  color: var(--win);
-  border: 1px solid var(--win);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-}
-
-.badge-elim {
-  background: rgba(209, 75, 65, 0.15);
-  color: var(--wicket);
-  border: 1px solid var(--wicket);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-}
-
-.badge-direct {
-  background: rgba(242, 169, 59, 0.15);
-  color: var(--tape);
-  border: 1px solid var(--tape);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-}
-
-.table-row-hover:hover {
-  background-color: var(--panel2);
 }
