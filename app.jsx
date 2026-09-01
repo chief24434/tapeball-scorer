@@ -97,13 +97,13 @@ function useStorageSync(key, apiPath = null) {
 }
 
 /* ---------------------------------------------------------
-   STATISTICAL HELPERS
+   HELPERS
 --------------------------------------------------------- */
 function genCode() {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
-function oversStr(legalBalls, limit) {
+function oversStr(legalBalls) {
   const o = Math.floor((legalBalls || 0) / 6);
   const b = (legalBalls || 0) % 6;
   return `${o}.${b}`;
@@ -127,7 +127,7 @@ function emptyBowler(name) {
   return { name, runs: 0, balls: 0, wkts: 0, overLog: [] };
 }
 
-function newInnings(battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, oversLimit, target) {
+function newInnings(battingTeam, bowlingTeam, battingPlayers = [], bowlingPlayers = [], oversLimit, target = null) {
   return {
     battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, oversLimit,
     target: target || null,
@@ -137,22 +137,18 @@ function newInnings(battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, ov
     score: 0, wkts: 0, legalBalls: 0,
     curOverRuns: 0, curOverWkts: 0,
     currentOverBalls: [],
-    extras: { wd: 0, nb: 0, b: 0, lb: 0 },
+    extras: { wd: 0, nb: 0 },
     freeHit: false,
     isComplete: false,
-    resultNote: "",
   };
 }
 
 /* ---------------------------------------------------------
-   REUSABLE ATOMIC UI COMPONENTS
+   UI ATOMS
 --------------------------------------------------------- */
 function Panel({ children, style, className = "" }) {
   return (
-    <div
-      className={className}
-      style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 14, ...style }}
-    >
+    <div className={className} style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 14, ...style }}>
       {children}
     </div>
   );
@@ -218,7 +214,7 @@ function Chip({ children, onClick, active }) {
   );
 }
 
-function BackBar({ title, onBack, right, onVpsClick, vpsConfigured }) {
+function BackBar({ title, onBack, right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", position: "sticky", top: 0, background: C.bg, zIndex: 20, borderBottom: `1px solid ${C.panelBorder}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -229,14 +225,7 @@ function BackBar({ title, onBack, right, onVpsClick, vpsConfigured }) {
         )}
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.ink, fontWeight: 600, letterSpacing: 0.5 }}>{title}</div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {onVpsClick && (
-          <button onClick={onVpsClick} className="tb-btn" style={{ background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "4px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🟢 VPS Connected
-          </button>
-        )}
-        {right}
-      </div>
+      {right}
     </div>
   );
 }
@@ -277,7 +266,7 @@ function ScoreHeader({ inn, code }) {
               {inn.score}<span style={{ color: C.wicket }}>/{inn.wkts}</span>
             </span>
             <span style={{ fontFamily: FONT_MONO, fontSize: 16, color: C.inkDim }}>
-              ({oversStr(inn.legalBalls, inn.oversLimit)} ov)
+              ({oversStr(inn.legalBalls)} ov)
             </span>
           </div>
           <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.inkFaint, marginTop: 2 }}>
@@ -305,18 +294,11 @@ function ScoreHeader({ inn, code }) {
    MAIN APPLICATION CONTAINER
 =========================================================== */
 function App() {
-  const [screen, setScreen] = useState("home"); // home | setup | live | break | done | watch | tournament | tournament_setup
+  const [screen, setScreen] = useState("home"); // home | setup | live | break | done | watch
   const [match, setMatch] = useState(null);
-  const [tournamentId, setTournamentId] = useState(null);
   const [undoStack, setUndoStack] = useState([]);
-  const [vpsModalOpen, setVpsModalOpen] = useState(false);
-  const [vpsUrl, setVpsUrlState] = useState(() => loadLocal("tapeball:vps_url") || "");
-
   const [completedMatches, setCompletedMatches] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
-  const [tournamentTeams, setTournamentTeams] = useStorageSync("tapeball:teams", "/api/teams");
-  const [tournaments, setTournaments] = useStorageSync("tapeball:tournaments", "/api/tournaments");
 
-  // Multi-device sync for active live match
   useEffect(() => {
     if (!match || !match.code) return;
     saveLocal(`tapeball:match:${match.code}`, match);
@@ -336,53 +318,20 @@ function App() {
     });
   };
 
-  const handleResetData = async () => {
-    if (!window.confirm("Are you sure you want to reset ALL tournament matches and database storage?")) return;
-    localStorage.clear();
-    await apiFetch("/api/reset", "POST");
-    setMatch(null);
-    setCompletedMatches([]);
-    setTournamentTeams([]);
-    setTournaments({});
-    setScreen("home");
-    alert("All tournament matches and database data have been completely reset!");
-  };
-
   const handleRecordMatchComplete = (m) => {
     const list = completedMatches || [];
     const inn1 = m.innings[0], inn2 = m.innings[1];
     const rec = {
       id: m.code + "-" + Date.now(),
-      tournamentId: m.tournamentId || null,
-      matchNum: m.matchNum || null,
       teamA: m.teamA, teamB: m.teamB,
-      scoreA: `${inn1.score}/${inn1.wkts} (${oversStr(inn1.legalBalls, inn1.oversLimit)})`,
-      scoreB: inn2 ? `${inn2.score}/${inn2.wkts} (${oversStr(inn2.legalBalls, inn2.oversLimit)})` : "DNB",
-      runsA: inn1.score, wktsA: inn1.wkts, ballsA: inn1.legalBalls,
-      runsB: inn2 ? inn2.score : 0, wktsB: inn2 ? inn2.wkts : 0, ballsB: inn2 ? inn2.legalBalls : 0,
-      oversLimit: m.oversLimit,
+      scoreA: `${inn1.score}/${inn1.wkts} (${oversStr(inn1.legalBalls)})`,
+      scoreB: inn2 ? `${inn2.score}/${inn2.wkts} (${oversStr(inn2.legalBalls)})` : "DNB",
       result: m.result,
       winner: m.winner,
       date: new Date().toISOString(),
       innings: m.innings,
     };
-
-    const nextList = [...list.filter((x) => x.id !== rec.id), rec];
-    setCompletedMatches(nextList);
-
-    if (m.tournamentId && tournaments) {
-      const tour = tournaments[m.tournamentId];
-      if (tour) {
-        const matchObj = tour.matches.find((x) => x.id === m.tournamentMatchId);
-        if (matchObj) {
-          matchObj.status = "done";
-          matchObj.result = m.result;
-          matchObj.winner = m.winner;
-          matchObj.innings = m.innings;
-          setTournaments({ ...tournaments, [m.tournamentId]: tour });
-        }
-      }
-    }
+    setCompletedMatches([...list.filter((x) => x.id !== rec.id), rec]);
   };
 
   return (
@@ -391,20 +340,12 @@ function App() {
         <Home
           onNew={() => setScreen("setup")}
           onWatch={() => setScreen("watch")}
-          onTournament={() => setScreen("tournament")}
-          vpsConfigured={true}
-          onVpsClick={() => setVpsModalOpen(true)}
-          onResetData={handleResetData}
         />
       )}
       {screen === "setup" && (
         <Setup
-          tournamentTeams={tournamentTeams || []}
           onCancel={() => setScreen("home")}
-          onStart={async (m) => {
-            const currentTeams = tournamentTeams || [];
-            const newTeams = Array.from(new Set([...currentTeams, m.teamA, m.teamB]));
-            setTournamentTeams(newTeams);
+          onStart={(m) => {
             setMatch(m);
             setUndoStack([]);
             setScreen("live");
@@ -418,7 +359,7 @@ function App() {
           onUndo={undo}
           canUndo={undoStack.length > 0}
           onInningsBreak={(m) => { setMatch(m); setScreen("break"); }}
-          onMatchDone={async (m) => {
+          onMatchDone={(m) => {
             setMatch(m);
             handleRecordMatchComplete(m);
             setScreen("done");
@@ -432,48 +373,11 @@ function App() {
       {screen === "done" && match && (
         <MatchDone
           match={match}
-          onHome={() => { setMatch(null); setScreen(match.tournamentId ? "tournament" : "home"); }}
+          onHome={() => { setMatch(null); setScreen("home"); }}
           onNew={() => { setMatch(null); setScreen("setup"); }}
         />
       )}
       {screen === "watch" && <Watch onBack={() => setScreen("home")} />}
-      {screen === "tournament" && (
-        <TournamentManager
-          tournaments={tournaments}
-          setTournaments={setTournaments}
-          onBack={() => setScreen("home")}
-          onLaunchMatch={(m) => {
-            setMatch(m);
-            setUndoStack([]);
-            setScreen("live");
-          }}
-          onNewTournament={() => setScreen("tournament_setup")}
-        />
-      )}
-      {screen === "tournament_setup" && (
-        <TournamentSetup
-          tournaments={tournaments}
-          setTournaments={setTournaments}
-          onCancel={() => setScreen("tournament")}
-          onCreated={(tourId) => {
-            setTournamentId(tourId);
-            setScreen("tournament");
-          }}
-        />
-      )}
-
-      {vpsModalOpen && (
-        <VpsConfigModal
-          currentUrl={vpsUrl}
-          onClose={() => setVpsModalOpen(false)}
-          onSave={(url) => {
-            saveLocal("tapeball:vps_url", url);
-            setVpsUrlState(url);
-            setVpsModalOpen(false);
-          }}
-          onResetData={handleResetData}
-        />
-      )}
     </div>
   );
 }
@@ -481,140 +385,68 @@ function App() {
 /* ---------------------------------------------------------
    HOME SCREEN
 --------------------------------------------------------- */
-function Home({ onNew, onWatch, onTournament, vpsConfigured, onVpsClick, onResetData }) {
+function Home({ onNew, onWatch }) {
+  const [history] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
   return (
     <div className="tb-fadein" style={{ padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Universal Tournament Engine</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={onResetData} className="tb-btn" style={{ background: "rgba(209,75,65,0.15)", border: `1px solid ${C.wicket}`, color: C.wicket, padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            🗑️ Reset Data
-          </button>
-          <button onClick={onVpsClick} className="tb-btn" style={{ background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            🟢 VPS Active
-          </button>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 18, marginBottom: 32 }}>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 54, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>ANY TOURNAMENT<br />& GROUND SCORER</div>
-        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Build tournaments for any number of teams, custom rounds & playoffs.</div>
+      <div style={{ marginTop: 24, marginBottom: 32 }}>
+        <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>FAST MATCH<br />SCORECARD</div>
+        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>Simple one-tap scoring for live ground matches.</div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <BigButton onClick={onTournament} bg={C.tape} color="#1A1305" style={{ padding: "20px", fontSize: 20, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          🏆 Universal Tournament Manager
+        <BigButton onClick={onNew} bg={C.tape} color="#1A1305" style={{ padding: "20px", fontSize: 22, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
+          ▶ Start New Match
         </BigButton>
-        <BigButton onClick={onNew} bg={C.panel2} color={C.ink} style={{ padding: "16px 20px", fontSize: 17, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          ▶ Quick Friendly Match
-        </BigButton>
-        <BigButton onClick={onWatch} style={{ padding: "16px 20px", fontSize: 16, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          📡 Watch Live Match (Real-Time Code)
+        <BigButton onClick={onWatch} style={{ padding: "16px 20px", fontSize: 17, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
+          📡 Watch Live Match (Code Sync)
         </BigButton>
       </div>
 
-      <div style={{ marginTop: 36, color: C.inkFaint, fontSize: 12, lineHeight: 1.6, padding: 14, background: C.bg2, borderRadius: 12, border: `1px solid ${C.panelBorder}` }}>
-        ⚡ <strong>Universal Tournament System</strong>: Create custom tournaments with 2 to 12+ teams, custom round-robin rounds, semifinals, finals, and NRR points tables!
-      </div>
+      {history && history.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <Label>Recent Match Results</Label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+            {history.slice().reverse().slice(0, 5).map((m) => (
+              <Panel key={m.id} style={{ padding: 12 }}>
+                <div style={{ fontFamily: FONT_BODY, fontSize: 14, fontWeight: 700 }}>{m.teamA} vs {m.teamB}</div>
+                <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.inkDim, marginTop: 2 }}>{m.scoreA} · {m.scoreB}</div>
+                <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.tape, marginTop: 4 }}>{m.result}</div>
+              </Panel>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function VpsConfigModal({ currentUrl, onClose, onSave, onResetData }) {
-  const [url, setUrl] = useState(currentUrl);
-  const [testing, setTesting] = useState(false);
-  const [statusMsg, setStatusMsg] = useState("");
-
-  async function testAndSave() {
-    setTesting(true);
-    setStatusMsg("Testing connection to VPS...");
-    const cleanUrl = url.trim().replace(/\/$/, "");
-    try {
-      const res = await fetch(`${cleanUrl || ""}/api/health`);
-      if (res.ok) {
-        setStatusMsg("✅ Connected successfully to VPS Database!");
-        setTimeout(() => onSave(cleanUrl), 800);
-      } else {
-        setStatusMsg("⚠️ Could not connect. Ensure vps_backend.py is running.");
-      }
-    } catch (e) {
-      setStatusMsg("❌ Connection failed. Check IP & VPS backend.");
-    } finally {
-      setTesting(false);
-    }
-  }
-
-  return (
-    <ModalShell title="VPS Storage API & Settings" onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div>
-          <Label>Custom VPS Server URL (optional)</Label>
-          <TextInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Leave blank for automatic Vercel Proxy" style={{ marginTop: 6 }} />
-        </div>
-        {statusMsg && <div style={{ fontSize: 13, color: statusMsg.startsWith("✅") ? C.win : C.wicket, fontWeight: 700 }}>{statusMsg}</div>}
-        <BigButton onClick={testAndSave} disabled={testing} bg={C.win} color="#0A1F0B" style={{ padding: 14, fontFamily: FONT_DISPLAY, fontSize: 18 }}>
-          Test & Save Connection
-        </BigButton>
-        <div style={{ borderTop: `1px solid ${C.panelBorder}`, pt: 10, marginTop: 10 }}>
-          <BigButton onClick={onResetData} bg={C.wicket} color="#fff" style={{ width: "100%", padding: 12, fontFamily: FONT_DISPLAY, fontSize: 16 }}>
-            🗑️ Clear All Matches & Reset VPS Database
-          </BigButton>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
 /* ---------------------------------------------------------
-   SETUP WIZARD (FRIENDLY MATCH)
+   SIMPLE MATCH SETUP WIZARD
 --------------------------------------------------------- */
-function Setup({ tournamentTeams, onCancel, onStart }) {
-  const [step, setStep] = useState(0);
-  const [teamA, setTeamA] = useState("");
-  const [teamB, setTeamB] = useState("");
-  const [playersAText, setPlayersAText] = useState("");
-  const [playersBText, setPlayersBText] = useState("");
-  const [tossWinner, setTossWinner] = useState("");
-  const [tossDecision, setTossDecision] = useState("bat");
+function Setup({ onCancel, onStart }) {
+  const [teamA, setTeamA] = useState("Team A");
+  const [teamB, setTeamB] = useState("Team B");
   const [overs, setOvers] = useState("8");
-  const [strikerName, setStrikerName] = useState("");
-  const [nonStrikerName, setNonStrikerName] = useState("");
-  const [bowlerName, setBowlerName] = useState("");
+  const [striker, setStriker] = useState("Striker 1");
+  const [nonStriker, setNonStriker] = useState("Striker 2");
+  const [bowler, setBowler] = useState("Bowler 1");
 
-  const playersA = playersAText.split(",").map((s) => s.trim()).filter(Boolean);
-  const playersB = playersBText.split(",").map((s) => s.trim()).filter(Boolean);
-
-  const steps = ["Teams", "Team A Players", "Team B Players", "Toss", "Overs", "Openers"];
-
-  const battingFirstTeam = tossDecision === "bat" ? tossWinner : (tossWinner === teamA ? teamB : teamA);
-  const bowlingFirstTeam = battingFirstTeam === teamA ? teamB : teamA;
-  const battingFirstPlayers = battingFirstTeam === teamA ? playersA : playersB;
-  const bowlingFirstPlayers = battingFirstTeam === teamA ? playersB : playersA;
-
-  const canNext = [
-    teamA.trim() && teamB.trim() && teamA.trim() !== teamB.trim(),
-    playersA.length >= 2,
-    playersB.length >= 2,
-    tossWinner,
-    overs && Number(overs) > 0,
-    strikerName && nonStrikerName && strikerName !== nonStrikerName && bowlerName,
-  ][step];
-
-  function startMatch() {
+  function start() {
     const code = genCode();
-    const inn1 = newInnings(battingFirstTeam, bowlingFirstTeam, battingFirstPlayers, bowlingFirstPlayers, Number(overs), null);
-    inn1.batsmen[strikerName] = emptyBatsman(strikerName);
-    inn1.batsmen[nonStrikerName] = emptyBatsman(nonStrikerName);
-    inn1.bowlers[bowlerName] = emptyBowler(bowlerName);
-    inn1.striker = strikerName;
-    inn1.nonStriker = nonStrikerName;
-    inn1.currentBowler = bowlerName;
-    inn1.order = [strikerName, nonStrikerName];
+    const inn1 = newInnings(teamA, teamB, [striker, nonStriker], [bowler], Number(overs), null);
+    inn1.batsmen[striker] = emptyBatsman(striker);
+    inn1.batsmen[nonStriker] = emptyBatsman(nonStriker);
+    inn1.bowlers[bowler] = emptyBowler(bowler);
+    inn1.striker = striker;
+    inn1.nonStriker = nonStriker;
+    inn1.currentBowler = bowler;
+    inn1.order = [striker, nonStriker];
 
     const m = {
-      code, teamA, teamB, playersA, playersB,
+      code, teamA, teamB,
       oversLimit: Number(overs),
-      tossWinner, tossDecision,
       innings: [inn1],
       currentInningsIdx: 0,
       status: "live",
@@ -626,140 +458,71 @@ function Setup({ tournamentTeams, onCancel, onStart }) {
 
   return (
     <div className="tb-fadein">
-      <BackBar title="Quick Match Setup" onBack={onCancel} />
-      <div style={{ padding: "8px 16px 4px", display: "flex", gap: 6 }}>
-        {steps.map((s, i) => (
-          <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= step ? C.tape : C.panelBorder }} />
-        ))}
-      </div>
-      <div style={{ padding: 20 }}>
-        {step === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <div>
-              <Label>Team A</Label>
-              <TextInput value={teamA} onChange={(e) => setTeamA(e.target.value)} placeholder="e.g. Saddam XI" style={{ marginTop: 6 }} />
-              {tournamentTeams.length > 0 && (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  {tournamentTeams.map((t) => <Chip key={t} active={teamA === t} onClick={() => setTeamA(t)}>{t}</Chip>)}
-                </div>
-              )}
-            </div>
-            <div>
-              <Label>Team B</Label>
-              <TextInput value={teamB} onChange={(e) => setTeamB(e.target.value)} placeholder="e.g. Arbaz XI" style={{ marginTop: 6 }} />
-              {tournamentTeams.length > 0 && (
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  {tournamentTeams.filter((t) => t !== teamA).map((t) => <Chip key={t} active={teamB === t} onClick={() => setTeamB(t)}>{t}</Chip>)}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        {step === 1 && (
+      <BackBar title="Match Setup" onBack={onCancel} />
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div>
-            <Label>{teamA} — Players (comma separated)</Label>
-            <textarea value={playersAText} onChange={(e) => setPlayersAText(e.target.value)} rows={5} placeholder="Ali, Bilal, Hamza, Usman, Fahad, Zeeshan..."
-              style={{ width: "100%", marginTop: 6, background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 12, color: C.ink, fontFamily: FONT_BODY, fontSize: 15 }} />
-            <div style={{ color: C.inkFaint, fontSize: 12, marginTop: 6 }}>{playersA.length} players entered · need at least 2</div>
+            <Label>Team A Name</Label>
+            <TextInput value={teamA} onChange={(e) => setTeamA(e.target.value)} style={{ marginTop: 6 }} />
           </div>
-        )}
-        {step === 2 && (
           <div>
-            <Label>{teamB} — Players (comma separated)</Label>
-            <textarea value={playersBText} onChange={(e) => setPlayersBText(e.target.value)} rows={5} placeholder="Ahmed, Danish, Kashif, Salman..."
-              style={{ width: "100%", marginTop: 6, background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 12, color: C.ink, fontFamily: FONT_BODY, fontSize: 15 }} />
-            <div style={{ color: C.inkFaint, fontSize: 12, marginTop: 6 }}>{playersB.length} players entered · need at least 2</div>
+            <Label>Team B Name</Label>
+            <TextInput value={teamB} onChange={(e) => setTeamB(e.target.value)} style={{ marginTop: 6 }} />
           </div>
-        )}
-        {step === 3 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <div>
-              <Label>Toss Won By</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <Chip active={tossWinner === teamA} onClick={() => setTossWinner(teamA)}>{teamA}</Chip>
-                <Chip active={tossWinner === teamB} onClick={() => setTossWinner(teamB)}>{teamB}</Chip>
-              </div>
-            </div>
-            <div>
-              <Label>Elected To</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <Chip active={tossDecision === "bat"} onClick={() => setTossDecision("bat")}>Bat First</Chip>
-                <Chip active={tossDecision === "bowl"} onClick={() => setTossDecision("bowl")}>Bowl First</Chip>
-              </div>
-            </div>
+        </div>
+
+        <div>
+          <Label>Overs Limit</Label>
+          <TextInput type="number" value={overs} onChange={(e) => setOvers(e.target.value)} style={{ marginTop: 6 }} />
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {[4, 6, 8, 10, 12, 15, 20].map((n) => (
+              <Chip key={n} active={overs === String(n)} onClick={() => setOvers(String(n))}>{n} ov</Chip>
+            ))}
           </div>
-        )}
-        {step === 4 && (
-          <div>
-            <Label>Overs Per Innings</Label>
-            <TextInput type="number" inputMode="numeric" value={overs} onChange={(e) => setOvers(e.target.value)} style={{ marginTop: 6 }} />
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              {[6, 8, 10, 12, 15, 20].map((n) => <Chip key={n} active={overs === String(n)} onClick={() => setOvers(String(n))}>{n}</Chip>)}
-            </div>
-          </div>
-        )}
-        {step === 5 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            <div style={{ color: C.inkDim, fontSize: 13 }}>{battingFirstTeam} bats first · {bowlingFirstTeam} bowls first</div>
+        </div>
+
+        <Panel style={{ padding: 14 }}>
+          <Label>Opening Batsmen ({teamA})</Label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
             <div>
-              <Label>Striker (on strike)</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                {battingFirstPlayers.map((p) => <Chip key={p} active={strikerName === p} onClick={() => setStrikerName(p)}>{p}</Chip>)}
-              </div>
+              <Label>Striker</Label>
+              <TextInput value={striker} onChange={(e) => setStriker(e.target.value)} style={{ marginTop: 4 }} />
             </div>
             <div>
               <Label>Non-Striker</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                {battingFirstPlayers.filter((p) => p !== strikerName).map((p) => <Chip key={p} active={nonStrikerName === p} onClick={() => setNonStrikerName(p)}>{p}</Chip>)}
-              </div>
-            </div>
-            <div>
-              <Label>Opening Bowler</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                {bowlingFirstPlayers.map((p) => <Chip key={p} active={bowlerName === p} onClick={() => setBowlerName(p)}>{p}</Chip>)}
-              </div>
+              <TextInput value={nonStriker} onChange={(e) => setNonStriker(e.target.value)} style={{ marginTop: 4 }} />
             </div>
           </div>
-        )}
-      </div>
-      <div style={{ position: "sticky", bottom: 0, padding: 16, background: C.bg, borderTop: `1px solid ${C.panelBorder}`, display: "flex", gap: 10 }}>
-        {step > 0 && <BigButton onClick={() => setStep(step - 1)} style={{ padding: "14px 18px" }}>Back</BigButton>}
-        {step < steps.length - 1 && (
-          <BigButton onClick={() => setStep(step + 1)} disabled={!canNext} bg={C.tape} color="#1A1305" style={{ flex: 1, padding: "14px 18px", fontWeight: 800 }}>
-            Continue
-          </BigButton>
-        )}
-        {step === steps.length - 1 && (
-          <BigButton onClick={startMatch} disabled={!canNext} bg={C.win} color="#0A1F0B" style={{ flex: 1, padding: "14px 18px", fontWeight: 800 }}>
-            Start Match ▶
-          </BigButton>
-        )}
+        </Panel>
+
+        <Panel style={{ padding: 14 }}>
+          <Label>Opening Bowler ({teamB})</Label>
+          <TextInput value={bowler} onChange={(e) => setBowler(e.target.value)} style={{ marginTop: 6 }} />
+        </Panel>
+
+        <BigButton onClick={start} disabled={!teamA || !teamB || !striker || !nonStriker || !bowler} bg={C.win} color="#0A1F0B" style={{ padding: 16, width: "100%", fontFamily: FONT_DISPLAY, fontSize: 22 }}>
+          Start Match ▶
+        </BigButton>
       </div>
     </div>
   );
 }
 
 /* ---------------------------------------------------------
-   LIVE SCORING ENGINE (FULLY FIXED & ROBUST)
+   LIVE SCORER (ONE-TAP WIDE, STREAMLINED WICKETS)
 --------------------------------------------------------- */
 function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, onExit }) {
   const inn = match.innings[match.currentInningsIdx];
-  const [extraMode, setExtraMode] = useState(null);
   const [wicketOpen, setWicketOpen] = useState(false);
   const [bowlerModal, setBowlerModal] = useState(() => !inn.currentBowler);
   const [newBatModal, setNewBatModal] = useState(null);
   const [tab, setTab] = useState("score");
 
-  const availableNewBatsmen = inn.battingPlayers.filter((p) => !inn.order.includes(p));
-  const availableBowlers = inn.bowlingPlayers.filter((p) => p !== inn.prevBowler);
-
   function checkInningsEnd(m2, inn2) {
-    const maxWkts = inn2.battingPlayers.length - 1;
-    const allOut = inn2.wkts >= maxWkts;
     const oversDone = inn2.legalBalls >= inn2.oversLimit * 6;
     const chased = inn2.target != null && inn2.score >= inn2.target;
 
-    if (!allOut && !oversDone && !chased) return { m2, ended: false };
+    if (!oversDone && !chased) return { m2, ended: false };
 
     inn2.isComplete = true;
     if (m2.currentInningsIdx === 0) {
@@ -769,9 +532,8 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
       m2.status = "done";
       const inn1 = m2.innings[0];
       if (inn2.score >= inn2.target) {
-        const wktsLeft = maxWkts - inn2.wkts;
         m2.winner = inn2.battingTeam;
-        m2.result = `${inn2.battingTeam} won by ${wktsLeft} wicket${wktsLeft === 1 ? "" : "s"}`;
+        m2.result = `${inn2.battingTeam} won the match!`;
       } else if (inn2.score === inn2.target - 1) {
         m2.winner = "";
         m2.result = "Match tied";
@@ -843,66 +605,36 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     setMatch(m3);
   }
 
-  function applyExtra(kind, extraRuns) {
+  // ONE-TAP WIDE / NO-BALL (ZERO POPUPS!)
+  function applyExtra(kind) {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
     const bowl = inn2.bowlers[inn2.currentBowler];
 
     if (kind === "wd") {
-      const total = 1 + extraRuns;
-      inn2.extras.wd += total;
-      inn2.score += total;
-      if (bowl) bowl.runs += total;
-      inn2.curOverRuns += total;
-      inn2.currentOverBalls.push({ type: "wide", label: extraRuns ? `wd+${extraRuns}` : "wd" });
-      if (extraRuns % 2 === 1) { const t = inn2.striker; inn2.striker = inn2.nonStriker; inn2.nonStriker = t; }
+      inn2.extras.wd += 1;
+      inn2.score += 1;
+      if (bowl) bowl.runs += 1;
+      inn2.curOverRuns += 1;
+      inn2.currentOverBalls.push({ type: "wide", label: "wd" });
     } else if (kind === "nb") {
-      const bat = inn2.batsmen[inn2.striker];
       inn2.extras.nb += 1;
-      inn2.score += 1 + extraRuns;
-      if (bat) {
-        bat.runs += extraRuns;
-        bat.balls += 1;
-        if (extraRuns === 4) bat.fours += 1;
-        if (extraRuns === 6) bat.sixes += 1;
-      }
-      if (bowl) bowl.runs += 1 + extraRuns;
-      inn2.curOverRuns += 1 + extraRuns;
-      inn2.currentOverBalls.push({ type: "noball", label: `nb+${extraRuns}` });
+      inn2.score += 1;
+      if (bowl) bowl.runs += 1;
+      inn2.curOverRuns += 1;
+      inn2.currentOverBalls.push({ type: "noball", label: "nb" });
       inn2.freeHit = true;
-      if (extraRuns % 2 === 1) { const t = inn2.striker; inn2.striker = inn2.nonStriker; inn2.nonStriker = t; }
-      setMatch(m2);
-      setExtraMode(null);
-      return;
-    } else if (kind === "b" || kind === "lb") {
-      const bat = inn2.batsmen[inn2.striker];
-      inn2.extras[kind] += extraRuns;
-      inn2.score += extraRuns;
-      if (bat) bat.balls += 1;
-      if (bowl) bowl.balls += 1;
-      inn2.legalBalls += 1;
-      inn2.curOverRuns += extraRuns;
-      inn2.currentOverBalls.push({ type: kind, label: `${kind}${extraRuns}` });
-      inn2.freeHit = false;
-      if (extraRuns % 2 === 1) { const t = inn2.striker; inn2.striker = inn2.nonStriker; inn2.nonStriker = t; }
     }
 
     const { m2: m3, ended, toBreak } = checkInningsEnd(m2, inn2);
-    setExtraMode(null);
     if (ended) {
       if (toBreak) { setMatch(m3); onInningsBreak(m3); return; }
       else { onMatchDone(m3); return; }
     }
-    if ((kind === "b" || kind === "lb") && inn2.legalBalls % 6 === 0) {
-      finishOver(m3, inn2);
-      setMatch(m3);
-      setBowlerModal(true);
-      return;
-    }
     setMatch(m3);
   }
 
-  function applyWicket({ type, whoOut, runsCompleted, newBatsman, fielder }) {
+  function applyWicket({ type, whoOut, runsCompleted, newBatsman }) {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
     const bowl = inn2.bowlers[inn2.currentBowler];
@@ -919,7 +651,6 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     if (bat) {
       bat.out = true;
       bat.how = type;
-      bat.fielder = fielder || "";
       if (type !== "run out") { bat.bowler = inn2.currentBowler; }
       bat.balls += type === "run out" ? 0 : 1;
     }
@@ -937,11 +668,9 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     inn2.currentOverBalls.push({ type: "wicket", label: "W" });
     inn2.freeHit = false;
 
-    const maxWkts = inn2.battingPlayers.length - 1;
-    const isAllOut = inn2.wkts >= maxWkts || !newBatsman;
-
-    if (!isAllOut && newBatsman) {
+    if (newBatsman) {
       inn2.batsmen[newBatsman] = inn2.batsmen[newBatsman] || emptyBatsman(newBatsman);
+      if (!inn2.battingPlayers.includes(newBatsman)) inn2.battingPlayers.push(newBatsman);
       if (!inn2.order.includes(newBatsman)) inn2.order.push(newBatsman);
       if (whoOut === "striker") inn2.striker = newBatsman;
       else inn2.nonStriker = newBatsman;
@@ -976,6 +705,7 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     const inn2 = m2.innings[m2.currentInningsIdx];
     inn2.currentBowler = name;
     inn2.bowlers[name] = inn2.bowlers[name] || emptyBowler(name);
+    if (!inn2.bowlingPlayers.includes(name)) inn2.bowlingPlayers.push(name);
     setMatch(m2);
     setBowlerModal(false);
   }
@@ -1029,42 +759,24 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
             <div style={{ marginTop: 8 }}><OverDots balls={inn.currentOverBalls || []} /></div>
           </div>
 
-          {extraMode && (
-            <Panel style={{ padding: 12, marginBottom: 12, borderColor: C.tape }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontFamily: FONT_BODY, fontWeight: 800, color: C.tape, fontSize: 13, textTransform: "uppercase" }}>
-                  {extraMode === "wd" ? "Wide — extra runs run?" : extraMode === "nb" ? "No ball — runs off the bat?" : extraMode === "b" ? "Bye — runs taken" : "Leg bye — runs taken"}
-                </div>
-                <button onClick={() => setExtraMode(null)} style={{ background: "none", border: "none", color: C.inkFaint, cursor: "pointer" }}>✕</button>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-                {(extraMode === "nb" ? [0, 1, 2, 3, 4, 6] : [0, 1, 2, 3, 4]).map((n) => (
-                  <BigButton key={n} onClick={() => applyExtra(extraMode, n)} bg={C.panel2} style={{ padding: "12px 0", fontFamily: FONT_DISPLAY, fontSize: 22 }}>{n}</BigButton>
-                ))}
-              </div>
-            </Panel>
-          )}
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 8 }}>
             {[0, 1, 2, 3, 4, 6].map((n) => (
-              <BigButton key={n} onClick={() => applyNormal(n)} disabled={!!extraMode || !inn.currentBowler}
+              <BigButton key={n} onClick={() => applyNormal(n)} disabled={!inn.currentBowler}
                 bg={n === 4 ? "rgba(79,168,214,0.12)" : n === 6 ? C.tape2 : C.panel2}
                 color={n === 6 ? "#fff" : C.ink}
                 style={{ padding: "16px 0", fontFamily: FONT_DISPLAY, fontSize: 28 }}>
                 {n}
               </BigButton>
             ))}
-            <BigButton onClick={() => setWicketOpen(true)} disabled={!!extraMode || !inn.currentBowler} bg={C.wicket} color="#fff" style={{ padding: "16px 0", fontFamily: FONT_DISPLAY, fontSize: 22 }}>OUT</BigButton>
+            <BigButton onClick={() => setWicketOpen(true)} disabled={!inn.currentBowler} bg={C.wicket} color="#fff" style={{ padding: "16px 0", fontFamily: FONT_DISPLAY, fontSize: 22 }}>OUT</BigButton>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-            <BigButton onClick={() => setExtraMode("wd")} disabled={!inn.currentBowler} style={{ padding: "12px 0", fontFamily: FONT_DISPLAY, fontSize: 18 }}>WD</BigButton>
-            <BigButton onClick={() => setExtraMode("nb")} disabled={!inn.currentBowler} style={{ padding: "12px 0", fontFamily: FONT_DISPLAY, fontSize: 18 }}>NB</BigButton>
-            <BigButton onClick={() => setExtraMode("b")} disabled={!inn.currentBowler} style={{ padding: "12px 0", fontFamily: FONT_DISPLAY, fontSize: 18 }}>BYE</BigButton>
-            <BigButton onClick={() => setExtraMode("lb")} disabled={!inn.currentBowler} style={{ padding: "12px 0", fontFamily: FONT_DISPLAY, fontSize: 18 }}>LB</BigButton>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <BigButton onClick={() => applyExtra("wd")} disabled={!inn.currentBowler} style={{ padding: "14px 0", fontFamily: FONT_DISPLAY, fontSize: 20 }}>WD (+1 Extra)</BigButton>
+            <BigButton onClick={() => applyExtra("nb")} disabled={!inn.currentBowler} style={{ padding: "14px 0", fontFamily: FONT_DISPLAY, fontSize: 20 }}>NB (+1 Free Hit)</BigButton>
           </div>
 
           <div style={{ marginTop: 16, fontFamily: FONT_MONO, fontSize: 11, color: C.inkFaint }}>
-            Extras — wd {inn.extras.wd} · nb {inn.extras.nb} · b {inn.extras.b} · lb {inn.extras.lb}
+            Extras — Wide {inn.extras.wd} · No Ball {inn.extras.nb}
           </div>
         </div>
       )}
@@ -1075,30 +787,27 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
         <WicketModal
           isFreeHit={inn.freeHit}
           striker={inn.striker} nonStriker={inn.nonStriker}
-          fielders={inn.bowlingPlayers}
           onClose={() => setWicketOpen(false)}
           onConfirm={(dismissalData) => {
-            const maxWkts = inn.battingPlayers.length - 1;
-            const willBeAllOut = inn.wkts + 1 >= maxWkts || availableNewBatsmen.length === 0;
-            if (willBeAllOut) {
-              applyWicket({ ...dismissalData, newBatsman: null });
-            } else {
-              setNewBatModal(dismissalData);
-            }
+            // Immediately open next batsman picker
+            setNewBatModal(dismissalData);
           }}
         />
       )}
 
       {newBatModal && (
         <NewBatsmanModal
-          available={availableNewBatsmen}
+          existingPlayers={inn.battingPlayers.filter(p => !inn.order.includes(p))}
           onConfirm={(name) => applyWicket({ ...newBatModal, newBatsman: name })}
           onClose={() => setNewBatModal(null)}
         />
       )}
 
       {bowlerModal && (
-        <BowlerModal available={availableBowlers} onPick={pickBowler} />
+        <BowlerModal
+          existingBowlers={inn.bowlingPlayers.filter(p => p !== inn.prevBowler)}
+          onPick={pickBowler}
+        />
       )}
     </div>
   );
@@ -1128,7 +837,7 @@ function Scorecard({ inn }) {
                 <tr key={n} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
                   <td style={{ padding: "6px 0", color: C.ink }}>
                     {b.name}{isCurrent ? " *" : ""}
-                    <div style={{ color: C.inkFaint, fontSize: 10 }}>{b.out ? `${b.how}${b.fielder ? ` (${b.fielder})` : ""}` : "not out"}</div>
+                    <div style={{ color: C.inkFaint, fontSize: 10 }}>{b.out ? `${b.how}` : "not out"}</div>
                   </td>
                   <td>{b.runs}</td><td>{b.balls}</td><td>{b.fours}</td><td>{b.sixes}</td><td>{strikeRate(b.runs, b.balls)}</td>
                 </tr>
@@ -1167,74 +876,133 @@ function Scorecard({ inn }) {
   );
 }
 
-function WicketModal({ isFreeHit, striker, nonStriker, fielders = [], onClose, onConfirm }) {
+/* STREAMLINED WICKET MODAL (NO RUN PROMPTS FOR BOWLED/CAUGHT/LBW/STUMPED) */
+function WicketModal({ isFreeHit, striker, nonStriker, onClose, onConfirm }) {
   const [type, setType] = useState(isFreeHit ? "run out" : "bowled");
   const [whoOut, setWhoOut] = useState("striker");
   const [runsCompleted, setRunsCompleted] = useState(0);
-  const [fielder, setFielder] = useState("");
 
-  const types = isFreeHit ? ["run out"] : ["bowled", "caught", "lbw", "run out", "stumped", "hit wicket", "retired"];
-  const needsFielder = type === "caught" || type === "run out" || type === "stumped";
+  const types = isFreeHit ? ["run out"] : ["bowled", "caught", "lbw", "run out", "stumped"];
+
+  function handleDismissalClick(t) {
+    if (t !== "run out") {
+      // INSTANTLY CONFIRM DISMISSAL WITH 0 RUNS
+      onConfirm({ type: t, whoOut: "striker", runsCompleted: 0 });
+    } else {
+      setType("run out");
+    }
+  }
 
   return (
-    <ModalShell title={isFreeHit ? "Wicket (Free Hit)" : "How out?"} onClose={onClose}>
+    <ModalShell title={isFreeHit ? "Wicket (Free Hit)" : "Select Wicket Type"} onClose={onClose}>
       {isFreeHit && (
         <div style={{ color: C.free, fontSize: 12, marginBottom: 10, fontWeight: 700 }}>
           ⚡ Free Hit active: Only Run Out is allowed!
         </div>
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        {types.map((t) => <Chip key={t} active={type === t} onClick={() => setType(t)}>{t}</Chip>)}
+        {types.map((t) => (
+          <Chip key={t} active={type === t} onClick={() => handleDismissalClick(t)}>
+            {t.toUpperCase()} {t !== "run out" ? "⚡ (1-Tap)" : ""}
+          </Chip>
+        ))}
       </div>
+
       {type === "run out" && (
-        <div style={{ marginBottom: 16 }}>
-          <Label>Who's Out</Label>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <Chip active={whoOut === "striker"} onClick={() => setWhoOut("striker")}>{striker || "Striker"}</Chip>
-            <Chip active={whoOut === "nonStriker"} onClick={() => setWhoOut("nonStriker")}>{nonStriker || "Non-Striker"}</Chip>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <Label>Who's Out</Label>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <Chip active={whoOut === "striker"} onClick={() => setWhoOut("striker")}>{striker || "Striker"}</Chip>
+              <Chip active={whoOut === "nonStriker"} onClick={() => setWhoOut("nonStriker")}>{nonStriker || "Non-Striker"}</Chip>
+            </div>
           </div>
+          <div>
+            <Label>Runs Completed Before Run Out</Label>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              {[0, 1, 2, 3].map((n) => <Chip key={n} active={runsCompleted === n} onClick={() => setRunsCompleted(n)}>{n}</Chip>)}
+            </div>
+          </div>
+          <BigButton onClick={() => onConfirm({ type: "run out", whoOut, runsCompleted })} bg={C.wicket} color="#fff" style={{ width: "100%", padding: 14, fontFamily: FONT_DISPLAY, fontSize: 18 }}>
+            Confirm Run Out
+          </BigButton>
         </div>
       )}
-      <div style={{ marginBottom: 16 }}>
-        <Label>Runs Completed Before Dismissal</Label>
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          {[0, 1, 2, 3].map((n) => <Chip key={n} active={runsCompleted === n} onClick={() => setRunsCompleted(n)}>{n}</Chip>)}
-        </div>
-      </div>
-      {needsFielder && (
-        <div style={{ marginBottom: 16 }}>
-          <Label>{type === "stumped" ? "Wicketkeeper" : "Fielder"} (optional)</Label>
-          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-            {fielders.map((f) => <Chip key={f} active={fielder === f} onClick={() => setFielder(f)}>{f}</Chip>)}
-          </div>
-        </div>
-      )}
-      <BigButton onClick={() => onConfirm({ type, whoOut: type === "run out" ? whoOut : "striker", runsCompleted, fielder })} bg={C.wicket} color="#fff" style={{ width: "100%", padding: 14, fontFamily: FONT_DISPLAY, fontSize: 18 }}>
-        Confirm Wicket
-      </BigButton>
     </ModalShell>
   );
 }
 
-function NewBatsmanModal({ available = [], onConfirm, onClose }) {
+/* DYNAMIC NEW BATSMAN MODAL (ADD ONE-BY-ONE) */
+function NewBatsmanModal({ existingPlayers = [], onConfirm, onClose }) {
+  const [customName, setCustomName] = useState("");
+
+  function handleAddCustom() {
+    if (customName.trim()) {
+      onConfirm(customName.trim());
+    }
+  }
+
   return (
     <ModalShell title="Select Next Batsman" onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {available.map((p) => (
-          <BigButton key={p} onClick={() => onConfirm(p)} bg={C.panel2} style={{ padding: 14, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
-        ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {existingPlayers.length > 0 && (
+          <div>
+            <Label>Select Existing Player</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+              {existingPlayers.map((p) => (
+                <BigButton key={p} onClick={() => onConfirm(p)} bg={C.panel2} style={{ padding: 12, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <Label>Type New Batsman Name (One-by-One)</Label>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="e.g. Ali" />
+            <BigButton onClick={handleAddCustom} disabled={!customName.trim()} bg={C.tape} color="#1A1305" style={{ padding: "0 16px", whiteSpace: "nowrap" }}>
+              + Add
+            </BigButton>
+          </div>
+        </div>
       </div>
     </ModalShell>
   );
 }
 
-function BowlerModal({ available = [], onPick }) {
+/* DYNAMIC NEW BOWLER MODAL (ADD ONE-BY-ONE) */
+function BowlerModal({ existingBowlers = [], onPick }) {
+  const [customName, setCustomName] = useState("");
+
+  function handleAddCustom() {
+    if (customName.trim()) {
+      onPick(customName.trim());
+    }
+  }
+
   return (
-    <ModalShell title="Over Complete — Select Next Bowler" onClose={null}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {available.map((p) => (
-          <BigButton key={p} onClick={() => onPick(p)} bg={C.panel2} style={{ padding: 14, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
-        ))}
+    <ModalShell title="Over Complete — Next Bowler" onClose={null}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {existingBowlers.length > 0 && (
+          <div>
+            <Label>Select Existing Bowler</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+              {existingBowlers.map((p) => (
+                <BigButton key={p} onClick={() => onPick(p)} bg={C.panel2} style={{ padding: 12, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <Label>Type New Bowler Name (One-by-One)</Label>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="e.g. Arbaz" />
+            <BigButton onClick={handleAddCustom} disabled={!customName.trim()} bg={C.tape} color="#1A1305" style={{ padding: "0 16px", whiteSpace: "nowrap" }}>
+              + Add
+            </BigButton>
+          </div>
+        </div>
       </div>
     </ModalShell>
   );
@@ -1265,13 +1033,11 @@ function InningsBreak({ match, onContinue }) {
 
   const battingTeam = inn1.bowlingTeam;
   const bowlingTeam = inn1.battingTeam;
-  const battingPlayers = battingTeam === match.teamA ? match.playersA : match.playersB;
-  const bowlingPlayers = bowlingTeam === match.teamA ? match.playersA : match.playersB;
   const target = inn1.score + 1;
 
   function start() {
     const m2 = structuredClone(match);
-    const inn2 = newInnings(battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, match.oversLimit, target);
+    const inn2 = newInnings(battingTeam, bowlingTeam, [striker, nonStriker], [bowler], match.oversLimit, target);
     inn2.batsmen[striker] = emptyBatsman(striker);
     inn2.batsmen[nonStriker] = emptyBatsman(nonStriker);
     inn2.bowlers[bowler] = emptyBowler(bowler);
@@ -1290,24 +1056,31 @@ function InningsBreak({ match, onContinue }) {
         <Panel style={{ padding: 16, marginBottom: 20, textAlign: "center" }}>
           <div style={{ color: C.inkFaint, fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>{inn1.battingTeam} Scored</div>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: 52, color: C.ink }}>{inn1.score}/{inn1.wkts}</div>
-          <div style={{ color: C.inkDim, fontSize: 13 }}>in {oversStr(inn1.legalBalls, inn1.oversLimit)} overs</div>
+          <div style={{ color: C.inkDim, fontSize: 13 }}>in {oversStr(inn1.legalBalls)} overs</div>
           <div style={{ marginTop: 10, color: C.tape, fontFamily: FONT_BODY, fontWeight: 800, fontSize: 16 }}>
             {bowlingTeam} Target: {target} runs in {match.oversLimit} overs
           </div>
         </Panel>
 
-        <Label>Striker</Label>
-        <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {battingPlayers.map((p) => <Chip key={p} active={striker === p} onClick={() => setStriker(p)}>{p}</Chip>)}
-        </div>
-        <Label>Non-striker</Label>
-        <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {battingPlayers.filter((p) => p !== striker).map((p) => <Chip key={p} active={nonStriker === p} onClick={() => setNonStriker(p)}>{p}</Chip>)}
-        </div>
-        <Label>Opening Bowler</Label>
-        <div style={{ display: "flex", gap: 8, marginTop: 8, marginBottom: 24, flexWrap: "wrap" }}>
-          {bowlingPlayers.map((p) => <Chip key={p} active={bowler === p} onClick={() => setBowler(p)}>{p}</Chip>)}
-        </div>
+        <Panel style={{ padding: 14, marginBottom: 16 }}>
+          <Label>2nd Innings Openers ({battingTeam})</Label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+            <div>
+              <Label>Striker</Label>
+              <TextInput value={striker} onChange={(e) => setStriker(e.target.value)} placeholder="e.g. Player 1" style={{ marginTop: 4 }} />
+            </div>
+            <div>
+              <Label>Non-Striker</Label>
+              <TextInput value={nonStriker} onChange={(e) => setNonStriker(e.target.value)} placeholder="e.g. Player 2" style={{ marginTop: 4 }} />
+            </div>
+          </div>
+        </Panel>
+
+        <Panel style={{ padding: 14, marginBottom: 20 }}>
+          <Label>Opening Bowler ({bowlingTeam})</Label>
+          <TextInput value={bowler} onChange={(e) => setBowler(e.target.value)} placeholder="e.g. Bowler 1" style={{ marginTop: 6 }} />
+        </Panel>
+
         <BigButton onClick={start} disabled={!striker || !nonStriker || striker === nonStriker || !bowler} bg={C.win} color="#0A1F0B" style={{ width: "100%", padding: 16, fontFamily: FONT_DISPLAY, fontSize: 20 }}>
           Start 2nd Innings ▶
         </BigButton>
@@ -1333,20 +1106,20 @@ function MatchDone({ match, onHome, onNew }) {
           <Panel style={{ padding: 14, flex: 1 }}>
             <div style={{ color: C.inkFaint, fontSize: 11 }}>{inn1.battingTeam}</div>
             <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26 }}>{inn1.score}/{inn1.wkts}</div>
-            <div style={{ color: C.inkFaint, fontSize: 11 }}>({oversStr(inn1.legalBalls, inn1.oversLimit)} ov)</div>
+            <div style={{ color: C.inkFaint, fontSize: 11 }}>({oversStr(inn1.legalBalls)} ov)</div>
           </Panel>
           {inn2 && (
             <Panel style={{ padding: 14, flex: 1 }}>
               <div style={{ color: C.inkFaint, fontSize: 11 }}>{inn2.battingTeam}</div>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26 }}>{inn2.score}/{inn2.wkts}</div>
-              <div style={{ color: C.inkFaint, fontSize: 11 }}>({oversStr(inn2.legalBalls, inn2.oversLimit)} ov)</div>
+              <div style={{ color: C.inkFaint, fontSize: 11 }}>({oversStr(inn2.legalBalls)} ov)</div>
             </Panel>
           )}
         </div>
         <Scorecard inn={inn1} />
         {inn2 && <Scorecard inn={inn2} />}
         <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-          <BigButton onClick={onHome} style={{ flex: 1, padding: 14 }}>Back to Menu</BigButton>
+          <BigButton onClick={onHome} style={{ flex: 1, padding: 14 }}>Home</BigButton>
           <BigButton onClick={onNew} bg={C.tape} color="#1A1305" style={{ flex: 1, padding: 14, fontWeight: 800 }}>New Match</BigButton>
         </div>
       </div>
@@ -1414,599 +1187,6 @@ function Watch({ onBack }) {
       )}
     </div>
   );
-}
-
-/* ===========================================================
-   UNIVERSAL DYNAMIC TOURNAMENT SYSTEM (ANY TEAMS & ROUNDS)
-=========================================================== */
-function TournamentManager({ tournaments, setTournaments, onBack, onLaunchMatch, onNewTournament }) {
-  const [activeTourId, setActiveTourId] = useState(() => {
-    const keys = Object.keys(tournaments || {});
-    return keys.length > 0 ? keys[keys.length - 1] : null;
-  });
-  const [tab, setTab] = useState("standings"); // standings | schedule | leaderboards | results
-
-  const tournament = activeTourId && tournaments ? tournaments[activeTourId] : null;
-
-  if (!tournament) {
-    return (
-      <div className="tb-fadein">
-        <BackBar title="Universal Tournament Manager" onBack={onBack} />
-        <div style={{ padding: 20, textAlign: "center" }}>
-          <div style={{ color: C.inkDim, marginBottom: 20 }}>No active tournament found. Create a tournament for any number of teams & rounds!</div>
-          <BigButton onClick={onNewTournament} bg={C.tape} color="#1A1305" style={{ padding: 16, width: "100%", fontFamily: FONT_DISPLAY, fontSize: 20 }}>
-            + Create New Custom Tournament
-          </BigButton>
-        </div>
-      </div>
-    );
-  }
-
-  const standings = calculateTournamentStandings(tournament);
-  const qualification = calculateQualificationStatus(tournament, standings);
-  const stats = calculatePlayerLeaderboards(tournament);
-
-  return (
-    <div className="tb-fadein">
-      <BackBar title={tournament.name} onBack={onBack}
-        right={
-          <button onClick={onNewTournament} className="tb-btn" style={{ background: C.panel2, color: C.tape, border: `1px solid ${C.panelBorder}`, padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>
-            + New
-          </button>
-        }
-      />
-
-      <div style={{ display: "flex", gap: 6, padding: "10px 16px", overflowX: "auto" }}>
-        <Chip active={tab === "standings"} onClick={() => setTab("standings")}>Points & NRR</Chip>
-        <Chip active={tab === "schedule"} onClick={() => setTab("schedule")}>Schedule & Play</Chip>
-        <Chip active={tab === "leaderboards"} onClick={() => setTab("leaderboards")}>Leaderboards</Chip>
-        <Chip active={tab === "results"} onClick={() => setTab("results")}>Results</Chip>
-      </div>
-
-      {tab === "standings" && (
-        <div style={{ padding: "0 16px 16px" }}>
-          <Panel style={{ padding: 14, marginBottom: 14 }}>
-            <Label>{tournament.teamNames?.length || 0}-Team Group Standings (Win=2, Tie=1, Loss=0)</Label>
-            <table style={{ width: "100%", marginTop: 10, borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 13 }}>
-              <thead>
-                <tr style={{ color: C.inkFaint, textAlign: "left", fontSize: 11 }}>
-                  <th style={{ paddingBottom: 8 }}>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>Pts</th><th>NRR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((st, idx) => {
-                  const statusInfo = qualification[st.team] || {};
-                  return (
-                    <tr key={st.team} className="table-row-hover" style={{ borderTop: `1px solid ${C.panelBorder}` }}>
-                      <td style={{ padding: "10px 0", color: idx < 2 ? C.tape : C.ink, fontWeight: 700 }}>
-                        {st.team}
-                        <div style={{ marginTop: 2 }}>
-                          {statusInfo.status === "QUALIFIED" && <span className="badge-qual">QUALIFIED</span>}
-                          {statusInfo.status === "DIRECT_FINALIST" && <span className="badge-direct">DIRECT FINALIST</span>}
-                          {statusInfo.status === "ELIMINATED" && <span className="badge-elim">ELIMINATED</span>}
-                        </div>
-                      </td>
-                      <td>{st.played}</td><td>{st.won}</td><td>{st.lost}</td><td>{st.tied}</td>
-                      <td style={{ color: C.tape, fontWeight: 700 }}>{st.pts}</td>
-                      <td>{st.nrr > 0 ? `+${st.nrr.toFixed(3)}` : st.nrr.toFixed(3)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Panel>
-
-          <Panel style={{ padding: 14 }}>
-            <Label>Qualification Status</Label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10, fontSize: 13 }}>
-              {Object.entries(qualification).map(([team, info]) => (
-                <div key={team} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.panelBorder}`, paddingBottom: 8 }}>
-                  <div>
-                    <strong style={{ color: C.ink }}>{team}</strong>
-                    <div style={{ color: C.inkDim, fontSize: 12 }}>{info.note}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        </div>
-      )}
-
-      {tab === "schedule" && (
-        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {tournament.matches.map((m) => {
-            const isCompleted = m.status === "done";
-            return (
-              <Panel key={m.id} style={{ padding: 14, borderColor: m.isPlayoff ? C.tape : C.panelBorder }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <div style={{ fontFamily: FONT_BODY, fontSize: 11, color: m.isPlayoff ? C.tape : C.inkFaint, fontWeight: 800, textTransform: "uppercase" }}>
-                    {m.isPlayoff ? `🏆 ${m.stageName || "PLAYOFF"}` : `Round ${m.round} · Match ${m.matchNum}`}
-                  </div>
-                  {isCompleted ? (
-                    <span style={{ color: C.win, fontSize: 11, fontWeight: 800 }}>✓ COMPLETED</span>
-                  ) : (
-                    <span style={{ color: C.tape, fontSize: 11, fontWeight: 800 }}>UPCOMING</span>
-                  )}
-                </div>
-                <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.ink }}>
-                  {m.teamA} <span style={{ color: C.inkFaint, fontSize: 16 }}>vs</span> {m.teamB}
-                </div>
-                {isCompleted ? (
-                  <div style={{ color: C.tape, fontSize: 13, marginTop: 4, fontWeight: 700 }}>
-                    Result: {m.result}
-                  </div>
-                ) : (
-                  <BigButton
-                    onClick={() => {
-                      const matchConfig = prepareTournamentMatch(tournament, m);
-                      onLaunchMatch(matchConfig);
-                    }}
-                    bg={m.isPlayoff ? C.win : C.tape}
-                    color={m.isPlayoff ? "#0A1F0B" : "#1A1305"}
-                    style={{ marginTop: 10, width: "100%", padding: 12, fontFamily: FONT_DISPLAY, fontSize: 18 }}
-                  >
-                    Start Match ▶
-                  </BigButton>
-                )}
-              </Panel>
-            );
-          })}
-        </div>
-      )}
-
-      {tab === "leaderboards" && (
-        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-          <Panel style={{ padding: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 20 }}>🟠</span>
-              <Label>Top Run Scorers (Orange Cap)</Label>
-            </div>
-            <table style={{ width: "100%", marginTop: 6, borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 12 }}>
-              <thead>
-                <tr style={{ color: C.inkFaint, textAlign: "left" }}>
-                  <th style={{ paddingBottom: 6 }}>Player</th><th>Team</th><th>Runs</th><th>Inns</th><th>SR</th><th>4s/6s</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.batsmen.slice(0, 10).map((b, i) => (
-                  <tr key={b.name} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
-                    <td style={{ padding: "6px 0", color: i === 0 ? C.tape : C.ink, fontWeight: i === 0 ? 700 : 400 }}>{b.name}</td>
-                    <td style={{ color: C.inkDim }}>{b.team}</td>
-                    <td style={{ color: C.tape, fontWeight: 700 }}>{b.runs}</td>
-                    <td>{b.innings}</td>
-                    <td>{strikeRate(b.runs, b.balls)}</td>
-                    <td>{b.fours}/{b.sixes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Panel>
-
-          <Panel style={{ padding: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 20 }}>🟣</span>
-              <Label>Top Wicket Takers (Purple Cap)</Label>
-            </div>
-            <table style={{ width: "100%", marginTop: 6, borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 12 }}>
-              <thead>
-                <tr style={{ color: C.inkFaint, textAlign: "left" }}>
-                  <th style={{ paddingBottom: 6 }}>Player</th><th>Team</th><th>Wkts</th><th>Overs</th><th>Runs</th><th>Econ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.bowlers.slice(0, 10).map((bw, i) => (
-                  <tr key={bw.name} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
-                    <td style={{ padding: "6px 0", color: i === 0 ? C.tape : C.ink, fontWeight: i === 0 ? 700 : 400 }}>{bw.name}</td>
-                    <td style={{ color: C.inkDim }}>{bw.team}</td>
-                    <td style={{ color: C.win, fontWeight: 700 }}>{bw.wkts}</td>
-                    <td>{Math.floor(bw.balls / 6)}.{bw.balls % 6}</td>
-                    <td>{bw.runs}</td>
-                    <td>{economy(bw.runs, bw.balls)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Panel>
-        </div>
-      )}
-
-      {tab === "results" && (
-        <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {tournament.matches.filter((m) => m.status === "done").map((m) => (
-            <Panel key={m.id} style={{ padding: 14 }}>
-              <div style={{ color: C.tape, fontFamily: FONT_BODY, fontSize: 12, fontWeight: 700 }}>
-                Match {m.matchNum} · {m.teamA} vs {m.teamB}
-              </div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: C.ink, marginTop: 4 }}>
-                {m.result}
-              </div>
-              {m.innings && m.innings[0] && (
-                <Scorecard inn={m.innings[0]} />
-              )}
-              {m.innings && m.innings[1] && (
-                <Scorecard inn={m.innings[1]} />
-              )}
-            </Panel>
-          ))}
-          {tournament.matches.filter((m) => m.status === "done").length === 0 && (
-            <div style={{ color: C.inkDim, padding: 20 }}>No completed matches in this tournament yet.</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------
-   CREATE UNIVERSAL DYNAMIC TOURNAMENT WIZARD
---------------------------------------------------------- */
-function TournamentSetup({ tournaments, setTournaments, onCancel, onCreated }) {
-  const [tourName, setTourName] = useState("Tapeball Premier League 2026");
-  const [overs, setOvers] = useState("8");
-  const [numTeams, setNumTeams] = useState(3);
-  const [numRounds, setNumRounds] = useState(2); // 1 Round or 2 Rounds or more
-  const [playoffType, setPlayoffType] = useState("top2_final"); // "top2_final" | "top4_semis"
-
-  const [teamsData, setTeamsData] = useState([
-    { name: "Saddam XI", roster: "Saddam, Ali, Bilal, Hamza, Usman, Fahad" },
-    { name: "Arbaz XI", roster: "Arbaz, Ahmed, Danish, Kashif, Salman, Waqas" },
-    { name: "Zain XI", roster: "Zain, Rashid, Imran, Kamran, Tariq, Rizwan" },
-    { name: "Fahad XI", roster: "Fahad, Haris, Shoaib, Noman, Bilal, Yasir" },
-  ]);
-
-  const activeTeams = teamsData.slice(0, numTeams);
-
-  function updateTeamName(idx, val) {
-    const next = [...teamsData];
-    if (!next[idx]) next[idx] = { name: "", roster: "" };
-    next[idx].name = val;
-    setTeamsData(next);
-  }
-
-  function updateTeamRoster(idx, val) {
-    const next = [...teamsData];
-    if (!next[idx]) next[idx] = { name: "", roster: "" };
-    next[idx].roster = val;
-    setTeamsData(next);
-  }
-
-  function createTournament() {
-    const tourId = "tour-" + Date.now();
-    const teamMap = {};
-    const teamNameList = [];
-
-    activeTeams.forEach((t, i) => {
-      const tName = t.name.trim() || `Team ${i + 1}`;
-      const rList = t.roster.split(",").map((s) => s.trim()).filter(Boolean);
-      teamMap[tName] = rList.length > 0 ? rList : [`Player 1`, `Player 2`, `Player 3`, `Player 4`];
-      teamNameList.push(tName);
-    });
-
-    // GENERATE DYNAMIC ROUND-ROBIN FIXTURES
-    const matches = generateRoundRobinFixtures(teamNameList, Number(numRounds), playoffType);
-
-    const tournamentData = {
-      id: tourId,
-      name: tourName,
-      oversLimit: Number(overs),
-      teams: teamMap,
-      teamNames: teamNameList,
-      numRounds: Number(numRounds),
-      playoffType,
-      matches,
-      createdAt: Date.now(),
-    };
-
-    const existing = tournaments || {};
-    const nextTournaments = { ...existing, [tourId]: tournamentData };
-    setTournaments(nextTournaments);
-
-    onCreated(tourId);
-  }
-
-  return (
-    <div className="tb-fadein">
-      <BackBar title="Create Custom Tournament" onBack={onCancel} />
-      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-        <div>
-          <Label>Tournament Name</Label>
-          <TextInput value={tourName} onChange={(e) => setTourName(e.target.value)} style={{ marginTop: 6 }} />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div>
-            <Label>Number of Teams</Label>
-            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-              {[2, 3, 4, 5, 6].map((n) => (
-                <Chip key={n} active={numTeams === n} onClick={() => setNumTeams(n)}>{n}</Chip>
-              ))}
-            </div>
-          </div>
-          <div>
-            <Label>Group Rounds</Label>
-            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-              {[1, 2, 3].map((r) => (
-                <Chip key={r} active={numRounds === r} onClick={() => setNumRounds(r)}>{r} Rd</Chip>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <Label>Playoff Format</Label>
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <Chip active={playoffType === "top2_final"} onClick={() => setPlayoffType("top2_final")}>Top 2 ➔ Direct Final</Chip>
-            {numTeams >= 4 && (
-              <Chip active={playoffType === "top4_semis"} onClick={() => setPlayoffType("top4_semis")}>Top 4 ➔ Semis & Final</Chip>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <Label>Overs Per Match</Label>
-          <TextInput type="number" value={overs} onChange={(e) => setOvers(e.target.value)} style={{ marginTop: 6 }} />
-        </div>
-
-        <Label>Team Names & Rosters</Label>
-        {activeTeams.map((t, idx) => (
-          <Panel key={idx} style={{ padding: 14 }}>
-            <Label>Team {idx + 1} Name</Label>
-            <TextInput value={t.name} onChange={(e) => updateTeamName(idx, e.target.value)} placeholder={`e.g. Team ${idx + 1}`} style={{ marginTop: 6, marginBottom: 8 }} />
-            <Label>Roster (comma separated)</Label>
-            <textarea value={t.roster} onChange={(e) => updateTeamRoster(idx, e.target.value)} rows={2} style={{ width: "100%", background: C.bg2, border: `1px solid ${C.panelBorder}`, borderRadius: 10, padding: 10, color: C.ink, fontFamily: FONT_BODY, fontSize: 14 }} />
-          </Panel>
-        ))}
-
-        <BigButton onClick={createTournament} bg={C.win} color="#0A1F0B" style={{ padding: 16, width: "100%", fontFamily: FONT_DISPLAY, fontSize: 20 }}>
-          Generate Dynamic Tournament Schedule ▶
-        </BigButton>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------
-   DYNAMIC ROUND-ROBIN FIXTURE ALGORITHM
---------------------------------------------------------- */
-function generateRoundRobinFixtures(teams, numRounds, playoffType) {
-  const matches = [];
-  let matchNum = 1;
-  const nList = [...teams];
-  if (nList.length % 2 !== 0) nList.push("BYE");
-
-  const numTeams = nList.length;
-  const roundsInCycle = numTeams - 1;
-
-  for (let cycle = 1; cycle <= numRounds; cycle++) {
-    let currentRotation = [...nList];
-    for (let r = 0; r < roundsInCycle; r++) {
-      for (let i = 0; i < numTeams / 2; i++) {
-        const team1 = currentRotation[i];
-        const team2 = currentRotation[numTeams - 1 - i];
-        if (team1 !== "BYE" && team2 !== "BYE") {
-          // Swap home/away alternate cycles
-          const isEvenCycle = cycle % 2 === 0;
-          matches.push({
-            id: `m-${matchNum}`,
-            matchNum,
-            round: cycle,
-            teamA: isEvenCycle ? team2 : team1,
-            teamB: isEvenCycle ? team1 : team2,
-            status: "pending",
-            isPlayoff: false,
-          });
-          matchNum++;
-        }
-      }
-      // Rotate array fixing first element
-      const fixed = currentRotation[0];
-      const rest = currentRotation.slice(1);
-      rest.unshift(rest.pop());
-      currentRotation = [fixed, ...rest];
-    }
-  }
-
-  // PLAYOFF MATCHES
-  if (playoffType === "top4_semis" && teams.length >= 4) {
-    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 1, teamA: "Rank 1", teamB: "Rank 4", status: "pending", isPlayoff: true, stageName: "SEMI-FINAL 1" });
-    matchNum++;
-    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 1, teamA: "Rank 2", teamB: "Rank 3", status: "pending", isPlayoff: true, stageName: "SEMI-FINAL 2" });
-    matchNum++;
-    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 2, teamA: "Winner Semi 1", teamB: "Winner Semi 2", status: "pending", isPlayoff: true, stageName: "FINAL MATCH" });
-  } else {
-    matches.push({ id: `m-${matchNum}`, matchNum, round: numRounds + 1, teamA: "Rank 1", teamB: "Rank 2", status: "pending", isPlayoff: true, stageName: "FINAL MATCH" });
-  }
-
-  return matches;
-}
-
-/* ---------------------------------------------------------
-   TOURNAMENT CALCULATIONS: STANDINGS, NRR & QUALIFICATION
---------------------------------------------------------- */
-function calculateTournamentStandings(tour) {
-  const teams = tour.teamNames || Object.keys(tour.teams || {});
-  const stats = {};
-
-  teams.forEach((t) => {
-    stats[t] = { team: t, played: 0, won: 0, lost: 0, tied: 0, pts: 0, runsScored: 0, ballsFaced: 0, runsConceded: 0, ballsBowled: 0, nrr: 0 };
-  });
-
-  (tour.matches || []).forEach((m) => {
-    if (m.status !== "done" || !m.innings || m.innings.length < 1) return;
-    const inn1 = m.innings[0], inn2 = m.innings[1];
-    if (!inn1) return;
-
-    const t1 = inn1.battingTeam, t2 = inn1.bowlingTeam;
-    if (!stats[t1] || !stats[t2]) return;
-
-    stats[t1].played += 1;
-    stats[t2].played += 1;
-
-    if (m.winner === t1) {
-      stats[t1].won += 1; stats[t1].pts += 2;
-      stats[t2].lost += 1;
-    } else if (m.winner === t2) {
-      stats[t2].won += 1; stats[t2].pts += 2;
-      stats[t1].lost += 1;
-    } else {
-      stats[t1].tied += 1; stats[t1].pts += 1;
-      stats[t2].tied += 1; stats[t2].pts += 1;
-    }
-
-    stats[t1].runsScored += inn1.score;
-    const maxWkts1 = inn1.battingPlayers ? inn1.battingPlayers.length - 1 : 10;
-    stats[t1].ballsFaced += (inn1.wkts >= maxWkts1) ? inn1.oversLimit * 6 : inn1.legalBalls;
-
-    stats[t2].runsConceded += inn1.score;
-    stats[t2].ballsBowled += (inn1.wkts >= maxWkts1) ? inn1.oversLimit * 6 : inn1.legalBalls;
-
-    if (inn2) {
-      stats[t2].runsScored += inn2.score;
-      const maxWkts2 = inn2.battingPlayers ? inn2.battingPlayers.length - 1 : 10;
-      stats[t2].ballsFaced += (inn2.wkts >= maxWkts2) ? inn2.oversLimit * 6 : inn2.legalBalls;
-
-      stats[t1].runsConceded += inn2.score;
-      stats[t1].ballsBowled += (inn2.wkts >= maxWkts2) ? inn2.oversLimit * 6 : inn2.legalBalls;
-    }
-  });
-
-  Object.values(stats).forEach((s) => {
-    const batOvers = s.ballsFaced / 6;
-    const bowlOvers = s.ballsBowled / 6;
-    const batRate = batOvers > 0 ? s.runsScored / batOvers : 0;
-    const bowlRate = bowlOvers > 0 ? s.runsConceded / bowlOvers : 0;
-    s.nrr = batRate - bowlRate;
-  });
-
-  return Object.values(stats).sort((a, b) => b.pts - a.pts || b.nrr - a.nrr || b.won - a.won);
-}
-
-function calculateQualificationStatus(tour, standings) {
-  const result = {};
-  const groupMatches = (tour.matches || []).filter((m) => !m.isPlayoff);
-  const remainingMatches = groupMatches.filter((m) => m.status !== "done").length;
-
-  standings.forEach((s) => {
-    const remMatchesForTeam = groupMatches.filter((m) => m.status !== "done" && (m.teamA === s.team || m.teamB === s.team)).length;
-    const maxAchievablePts = s.pts + (remMatchesForTeam * 2);
-    result[s.team] = { status: "IN_CONTENTION", note: `Max points achievable: ${maxAchievablePts}`, maxAchievablePts };
-  });
-
-  if (remainingMatches === 0) {
-    const targetQual = tour.playoffType === "top4_semis" ? 4 : 2;
-    standings.forEach((s, idx) => {
-      if (idx < targetQual) {
-        result[s.team] = { status: "QUALIFIED", note: "Secured Playoff spot" };
-      } else {
-        result[s.team] = { status: "ELIMINATED", note: "Eliminated from tournament" };
-      }
-    });
-  } else if (standings.length >= 3 && tour.playoffType === "top2_final") {
-    const team2Pts = standings[1] ? standings[1].pts : 0;
-    const team3MaxPts = result[standings[2].team] ? result[standings[2].team].maxAchievablePts : 0;
-
-    if (team3MaxPts < team2Pts) {
-      result[standings[2].team] = { status: "ELIMINATED", note: "Cannot catch top 2 points" };
-      result[standings[0].team] = { status: "DIRECT_FINALIST", note: "Qualified directly for Final" };
-      result[standings[1].team] = { status: "DIRECT_FINALIST", note: "Qualified directly for Final" };
-    }
-  }
-
-  return result;
-}
-
-function prepareTournamentMatch(tour, matchObj) {
-  const code = genCode();
-
-  let teamA = matchObj.teamA;
-  let teamB = matchObj.teamB;
-
-  if (matchObj.isPlayoff) {
-    const standings = calculateTournamentStandings(tour);
-    if (matchObj.stageName === "SEMI-FINAL 1") {
-      teamA = standings[0] ? standings[0].team : "Rank 1";
-      teamB = standings[3] ? standings[3].team : "Rank 4";
-    } else if (matchObj.stageName === "SEMI-FINAL 2") {
-      teamA = standings[1] ? standings[1].team : "Rank 2";
-      teamB = standings[2] ? standings[2].team : "Rank 3";
-    } else if (matchObj.stageName === "FINAL MATCH" && tour.playoffType === "top4_semis") {
-      const sf1 = tour.matches.find((x) => x.stageName === "SEMI-FINAL 1");
-      const sf2 = tour.matches.find((x) => x.stageName === "SEMI-FINAL 2");
-      teamA = sf1 && sf1.winner ? sf1.winner : "Winner Semi 1";
-      teamB = sf2 && sf2.winner ? sf2.winner : "Winner Semi 2";
-    } else if (matchObj.stageName === "FINAL MATCH") {
-      teamA = standings[0] ? standings[0].team : "Rank 1";
-      teamB = standings[1] ? standings[1].team : "Rank 2";
-    }
-  }
-
-  const playersA = tour.teams[teamA] || ["Player 1", "Player 2", "Player 3", "Player 4"];
-  const playersB = tour.teams[teamB] || ["Player 1", "Player 2", "Player 3", "Player 4"];
-
-  const inn1 = newInnings(teamA, teamB, playersA, playersB, tour.oversLimit, null);
-  inn1.batsmen[playersA[0]] = emptyBatsman(playersA[0]);
-  inn1.batsmen[playersA[1]] = emptyBatsman(playersA[1]);
-  inn1.bowlers[playersB[0]] = emptyBowler(playersB[0]);
-  inn1.striker = playersA[0];
-  inn1.nonStriker = playersA[1];
-  inn1.currentBowler = playersB[0];
-  inn1.order = [playersA[0], playersA[1]];
-
-  return {
-    code,
-    tournamentId: tour.id,
-    tournamentMatchId: matchObj.id,
-    matchNum: matchObj.matchNum,
-    teamA, teamB, playersA, playersB,
-    oversLimit: tour.oversLimit,
-    tossWinner: teamA, tossDecision: "bat",
-    innings: [inn1],
-    currentInningsIdx: 0,
-    status: "live",
-    result: "", winner: "",
-    createdAt: Date.now(),
-  };
-}
-
-function calculatePlayerLeaderboards(tour) {
-  const batsmen = {};
-  const bowlers = {};
-
-  (tour.matches || []).forEach((m) => {
-    if (m.status !== "done" || !m.innings) return;
-
-    m.innings.forEach((inn) => {
-      if (!inn || !inn.batsmen) return;
-
-      Object.values(inn.batsmen).forEach((b) => {
-        if (!b || b.balls === 0) return;
-        if (!batsmen[b.name]) {
-          batsmen[b.name] = { name: b.name, team: inn.battingTeam, runs: 0, balls: 0, fours: 0, sixes: 0, innings: 0 };
-        }
-        batsmen[b.name].runs += b.runs;
-        batsmen[b.name].balls += b.balls;
-        batsmen[b.name].fours += b.fours;
-        batsmen[b.name].sixes += b.sixes;
-        batsmen[b.name].innings += 1;
-      });
-
-      if (!inn.bowlers) return;
-      Object.values(inn.bowlers).forEach((bw) => {
-        if (!bw || bw.balls === 0) return;
-        if (!bowlers[bw.name]) {
-          bowlers[bw.name] = { name: bw.name, team: inn.bowlingTeam, wkts: 0, balls: 0, runs: 0 };
-        }
-        bowlers[bw.name].wkts += bw.wkts;
-        bowlers[bw.name].balls += bw.balls;
-        bowlers[bw.name].runs += bw.runs;
-      });
-    });
-  });
-
-  const sortedBatsmen = Object.values(batsmen).sort((a, b) => b.runs - a.runs || b.sixes - a.sixes);
-  const sortedBowlers = Object.values(bowlers).sort((a, b) => b.wkts - a.wkts || a.runs - b.runs);
-
-  return { batsmen: sortedBatsmen, bowlers: sortedBowlers };
 }
 
 /* ---------------------------------------------------------
