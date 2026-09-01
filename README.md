@@ -1,54 +1,36 @@
-# 🏏 Tapeball Scorer & 3-Team Tournament System
+# 🏏 Tapeball Scorer — Per-Match Ground Scorecard
 
-A production-ready **Tapeball Cricket Scorer & Tournament Management System** built with React 18, featuring a **Repo-Hosted Frontend** (Vercel/GitHub Pages) and a **VPS SQLite Storage API**.
-
----
-
-## 🏗️ Architecture Overview
-
-* 🌐 **Frontend**: Hosted on GitHub / Vercel / Netlify (Free 24/7 HTTPS access on any mobile device).
-* 🖥️ **Backend & Database**: Runs on your VPS (`vps_backend.py` + `tapeball.db` SQLite database).
-* 🔄 **Real-Time Multi-Device Sync**: Any player opening the app on their phone sees live score updates and tournament standings synchronized via the VPS API.
+A production-ready **Tapeball Cricket Scorer** built with React 18, featuring a **Vercel-Hosted Frontend** and a **VPS SQLite Storage API**.
 
 ---
 
-## 🚀 Step 1: Deploy Frontend to GitHub / Vercel
+## 🌐 Live Production App
 
-1. **Create a Git Repository & Push Code**:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit of Tapeball Scorer & Tournament App"
-   git remote add origin https://github.com/YOUR_USERNAME/tapeball-scorer.git
-   git push -u origin main
-   ```
-
-2. **Deploy for Free on Vercel or GitHub Pages**:
-   * **Vercel**: Import your `tapeball-scorer` GitHub repo on [Vercel](https://vercel.com). It will deploy instantly and give you a free link like `https://tapeball-scorer.vercel.app`.
-   * **GitHub Pages**: Go to Repo Settings -> Pages -> Source: `main` branch -> Save.
+* **Live Web App**: [https://tapeball-scorer.vercel.app/](https://tapeball-scorer.vercel.app/)
+* **Backend Database API**: Running on your Contabo VPS (`http://169.58.44.255:5000`)
+* **Real-Time Live Match Code Sync**: Enter any 4-digit match code to follow ball-by-ball updates in real time on any phone!
 
 ---
 
-## 🖥️ Step 2: Run Backend on Your VPS
+## ⚡ Ground Scoring Features
 
-1. Upload `vps_backend.py` to your VPS server.
-2. Run the server:
-   ```bash
-   python3 vps_backend.py
-   ```
-3. *(Optional)* Run in background using `nohup` or `screen`:
-   ```bash
-   nohup python3 vps_backend.py > vps.log 2>&1 &
-   ```
-   *The server runs on port **5000** with full CORS enabled for your frontend.*
+1. **⚡ One-Tap Wide (`WD`)**: Adds +1 wide extra without extra popups.
+2. **🎯 Streamlined Wickets (`OUT`)**:
+   - Bowled / Caught / LBW / Stumped: Instant 1-tap wicket (0 runs completed).
+   - Run Out ONLY: Asks who was run out and runs completed (0, 1, 2, 3).
+3. **⇄ Manual Striker Swap**: Swap striker and non-striker anytime with 1 tap.
+4. **📜 Previous Overs History Log**: View ball-by-ball logs of past completed overs.
+5. **🏃 Retired Batsman Support & Recall**: Mark batsmen retired and bring them back out to bat later.
+6. **➕ Dynamic One-by-One Player Names**: Type player names on the fly as they step up to bat or bowl.
+7. **↺ Undo Button**: Step back any ball or over boundary cleanly.
 
 ---
 
-## ⚙️ Step 3: Connect Frontend to VPS Storage
+## 📱 Building an Android APK
 
-1. Open your hosted app link (e.g. `https://tapeball-scorer.vercel.app`) on your phone or PC.
-2. Click **`⚙️ Configure VPS Backend`** in the top right header.
-3. Enter your VPS server URL (e.g. `http://YOUR_VPS_IP:5000`) and click **Save & Sync**.
-4. The status badge will change to **`🟢 VPS Sync Active`**.
+Use any of these free app builders with your live URL `https://tapeball-scorer.vercel.app/`:
 
-All tournaments, player stats, and live matches will now be permanently saved to your VPS SQLite database and synced live across all players' phones!
+* **Median.co**: [https://median.co](https://median.co) (Custom app icon, splash screen, fullscreen)
+* **AppsGeyser**: [https://appsgeyser.com](https://appsgeyser.com)
+* **PWABuilder**: [https://www.pwabuilder.com](https://www.pwabuilder.com)
+* **Google Bubblewrap CLI**: `npx @bubblewrap/cli init --manifest=https://tapeball-scorer.vercel.app/manifest.json`
