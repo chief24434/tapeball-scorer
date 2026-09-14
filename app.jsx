@@ -19,8 +19,8 @@ const C = {
   win: "#6FBF73",
 };
 
-const FONT_DISPLAY = "'Teko', sans-serif";
-const FONT_BODY = "'Manrope', sans-serif";
+const FONT_DISPLAY = "'Teko', system-ui, -apple-system, sans-serif";
+const FONT_BODY = "'Manrope', system-ui, -apple-system, sans-serif";
 const FONT_MONO = "'Space Mono', monospace";
 
 /* ---------------------------------------------------------
@@ -65,7 +65,7 @@ function useStorageSync(key, apiPath = null) {
   const syncData = useCallback(async () => {
     const local = loadLocal(key);
     setData(local);
-    if (apiPath) {
+    if (apiPath && navigator.onLine) {
       const remote = await apiFetch(apiPath, 'GET');
       if (remote !== null && JSON.stringify(remote) !== JSON.stringify(local)) {
         saveLocal(key, remote);
@@ -88,7 +88,7 @@ function useStorageSync(key, apiPath = null) {
   const update = useCallback(async (val) => {
     saveLocal(key, val);
     setData(val);
-    if (apiPath) {
+    if (apiPath && navigator.onLine) {
       await apiFetch(apiPath, 'POST', val);
     }
   }, [key, apiPath]);
@@ -303,7 +303,9 @@ function App() {
   useEffect(() => {
     if (!match || !match.code) return;
     saveLocal(`tapeball:match:${match.code}`, match);
-    apiFetch(`/api/match/${match.code}`, 'POST', match);
+    if (navigator.onLine) {
+      apiFetch(`/api/match/${match.code}`, 'POST', match);
+    }
   }, [match]);
 
   const snapshot = useCallback((m) => {
@@ -391,9 +393,14 @@ function Home({ onNew, onWatch }) {
   return (
     <div className="tb-fadein" style={{ padding: 20 }}>
       <div style={{ marginTop: 14, marginBottom: 32 }}>
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink }}>PRO GROUND<br />SCORECARD</div>
-        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>One-tap scoring, batsman swap, over history & retired batsman support.</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
+          <span style={{ fontSize: 11, background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "3px 8px", borderRadius: 999, fontWeight: 700 }}>
+            ⚡ 100% Offline Ready
+          </span>
+        </div>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink, marginTop: 8 }}>PRO GROUND<br />SCORECARD</div>
+        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>One-tap scoring, interactive No Ball runs, over history & offline caching.</div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -510,11 +517,12 @@ function Setup({ onCancel, onStart }) {
 }
 
 /* ---------------------------------------------------------
-   LIVE SCORER (SWAP BATSMAN, OVER HISTORY, RETIRED BATSMAN)
+   LIVE SCORER (INTERACTIVE NO BALL RUNS & SWAP BATSMAN)
 --------------------------------------------------------- */
 function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, onExit }) {
   const inn = match.innings[match.currentInningsIdx];
   const [wicketOpen, setWicketOpen] = useState(false);
+  const [noBallOpen, setNoBallOpen] = useState(false);
   const [bowlerModal, setBowlerModal] = useState(() => !inn.currentBowler);
   const [newBatModal, setNewBatModal] = useState(null);
   const [tab, setTab] = useState("score");
@@ -625,27 +633,61 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     setMatch(m3);
   }
 
-  function applyExtra(kind) {
+  // ONE-TAP WIDE
+  function applyWide() {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
     const bowl = inn2.bowlers[inn2.currentBowler];
 
-    if (kind === "wd") {
-      inn2.extras.wd += 1;
-      inn2.score += 1;
-      if (bowl) bowl.runs += 1;
-      inn2.curOverRuns += 1;
-      inn2.currentOverBalls.push({ type: "wide", label: "wd" });
-    } else if (kind === "nb") {
-      inn2.extras.nb += 1;
-      inn2.score += 1;
-      if (bowl) bowl.runs += 1;
-      inn2.curOverRuns += 1;
-      inn2.currentOverBalls.push({ type: "noball", label: "nb" });
-      inn2.freeHit = true;
+    inn2.extras.wd += 1;
+    inn2.score += 1;
+    if (bowl) bowl.runs += 1;
+    inn2.curOverRuns += 1;
+    inn2.currentOverBalls.push({ type: "wide", label: "wd" });
+
+    const { m2: m3, ended, toBreak } = checkInningsEnd(m2, inn2);
+    if (ended) {
+      if (toBreak) { setMatch(m3); onInningsBreak(m3); return; }
+      else { onMatchDone(m3); return; }
+    }
+    setMatch(m3);
+  }
+
+  // INTERACTIVE NO BALL (ASK RUNS OFF BAT: 0, 1, 2, 3, 4, 6)
+  function applyNoBall(runsOffBat) {
+    const m2 = structuredClone(match);
+    const inn2 = m2.innings[m2.currentInningsIdx];
+    const bat = inn2.batsmen[inn2.striker];
+    const bowl = inn2.bowlers[inn2.currentBowler];
+
+    const totalRunsThisBall = 1 + runsOffBat; // 1 NB extra + runs off bat
+
+    inn2.extras.nb += 1;
+    inn2.score += totalRunsThisBall;
+
+    if (runsOffBat > 0 && bat) {
+      bat.runs += runsOffBat;
+      bat.balls += 1;
+      if (runsOffBat === 4) bat.fours += 1;
+      if (runsOffBat === 6) bat.sixes += 1;
+    }
+
+    if (bowl) bowl.runs += totalRunsThisBall;
+    inn2.curOverRuns += totalRunsThisBall;
+
+    const dotLabel = runsOffBat > 0 ? `nb+${runsOffBat}` : "nb";
+    inn2.currentOverBalls.push({ type: "noball", label: dotLabel });
+    inn2.freeHit = true;
+
+    if (runsOffBat % 2 === 1) {
+      const t = inn2.striker;
+      inn2.striker = inn2.nonStriker;
+      inn2.nonStriker = t;
     }
 
     const { m2: m3, ended, toBreak } = checkInningsEnd(m2, inn2);
+    setNoBallOpen(false);
+
     if (ended) {
       if (toBreak) { setMatch(m3); onInningsBreak(m3); return; }
       else { onMatchDone(m3); return; }
@@ -808,8 +850,8 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
             <BigButton onClick={() => setWicketOpen(true)} disabled={!inn.currentBowler} bg={C.wicket} color="#fff" style={{ padding: "16px 0", fontFamily: FONT_DISPLAY, fontSize: 22 }}>OUT</BigButton>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <BigButton onClick={() => applyExtra("wd")} disabled={!inn.currentBowler} style={{ padding: "14px 0", fontFamily: FONT_DISPLAY, fontSize: 20 }}>WD (+1 Extra)</BigButton>
-            <BigButton onClick={() => applyExtra("nb")} disabled={!inn.currentBowler} style={{ padding: "14px 0", fontFamily: FONT_DISPLAY, fontSize: 20 }}>NB (+1 Free Hit)</BigButton>
+            <BigButton onClick={applyWide} disabled={!inn.currentBowler} style={{ padding: "14px 0", fontFamily: FONT_DISPLAY, fontSize: 20 }}>WD (+1 Extra)</BigButton>
+            <BigButton onClick={() => setNoBallOpen(true)} disabled={!inn.currentBowler} style={{ padding: "14px 0", fontFamily: FONT_DISPLAY, fontSize: 20 }}>NB (No Ball Runs)</BigButton>
           </div>
 
           <div style={{ marginTop: 16, fontFamily: FONT_MONO, fontSize: 11, color: C.inkFaint }}>
@@ -842,6 +884,13 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
 
       {tab === "card" && <Scorecard inn={inn} />}
 
+      {noBallOpen && (
+        <NoBallModal
+          onSelect={(runsOffBat) => applyNoBall(runsOffBat)}
+          onClose={() => setNoBallOpen(false)}
+        />
+      )}
+
       {wicketOpen && (
         <WicketModal
           isFreeHit={inn.freeHit}
@@ -869,6 +918,43 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
         />
       )}
     </div>
+  );
+}
+
+/* NO BALL RUNS MODAL */
+function NoBallModal({ onSelect, onClose }) {
+  return (
+    <ModalShell title="⚡ No Ball — Select Runs Off The Bat" onClose={onClose}>
+      <div style={{ color: C.inkDim, fontSize: 13, marginBottom: 14 }}>
+        Each option automatically includes the <strong>+1 No Ball extra</strong> and grants a <strong>Free Hit</strong> on the next ball!
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        <BigButton onClick={() => onSelect(0)} bg={C.panel2} style={{ padding: "16px 0", textAlign: "center" }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.tape }}>0</div>
+          <div style={{ fontSize: 11, color: C.inkFaint }}>Just 1 NB Extra</div>
+        </BigButton>
+        <BigButton onClick={() => onSelect(1)} bg={C.panel2} style={{ padding: "16px 0", textAlign: "center" }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.ink }}>+1</div>
+          <div style={{ fontSize: 11, color: C.inkFaint }}>Single (2 Total)</div>
+        </BigButton>
+        <BigButton onClick={() => onSelect(2)} bg={C.panel2} style={{ padding: "16px 0", textAlign: "center" }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.ink }}>+2</div>
+          <div style={{ fontSize: 11, color: C.inkFaint }}>Double (3 Total)</div>
+        </BigButton>
+        <BigButton onClick={() => onSelect(3)} bg={C.panel2} style={{ padding: "16px 0", textAlign: "center" }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.ink }}>+3</div>
+          <div style={{ fontSize: 11, color: C.inkFaint }}>Three (4 Total)</div>
+        </BigButton>
+        <BigButton onClick={() => onSelect(4)} bg="rgba(79,168,214,0.15)" style={{ padding: "16px 0", textAlign: "center", borderColor: C.free }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.free }}>+4</div>
+          <div style={{ fontSize: 11, color: C.free }}>FOUR (5 Total)</div>
+        </BigButton>
+        <BigButton onClick={() => onSelect(6)} bg={C.tape2} color="#fff" style={{ padding: "16px 0", textAlign: "center" }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: "#fff" }}>+6</div>
+          <div style={{ fontSize: 11, color: "#fff" }}>SIX (7 Total)</div>
+        </BigButton>
+      </div>
+    </ModalShell>
   );
 }
 
