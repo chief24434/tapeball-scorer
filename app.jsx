@@ -255,6 +255,13 @@ function OverDots({ balls = [] }) {
 
 function ScoreHeader({ inn, code }) {
   if (!inn) return null;
+
+  const crr = economy(inn.score, inn.legalBalls);
+  const projected = inn.legalBalls > 0 ? Math.round((inn.score / (inn.legalBalls / 6)) * inn.oversLimit) : 0;
+  const runsNeeded = inn.target ? Math.max(inn.target - inn.score, 0) : 0;
+  const ballsRem = inn.target ? Math.max(inn.oversLimit * 6 - inn.legalBalls, 0) : 0;
+  const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem / 6)).toFixed(2) : "0.00";
+
   return (
     <div style={{ padding: "18px 16px 10px", background: `linear-gradient(180deg, ${C.bg2}, ${C.bg})` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -267,14 +274,23 @@ function ScoreHeader({ inn, code }) {
               {inn.score}<span style={{ color: C.wicket }}>/{inn.wkts}</span>
             </span>
             <span style={{ fontFamily: FONT_MONO, fontSize: 16, color: C.inkDim }}>
-              ({oversStr(inn.legalBalls)} ov)
+              ({oversStr(inn.legalBalls)} / {inn.oversLimit} ov)
             </span>
           </div>
-          <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.inkFaint, marginTop: 2 }}>
-            CRR {economy(inn.score, inn.legalBalls)}
-            {inn.target ? `  ·  need ${Math.max(inn.target - inn.score, 0)} off ${Math.max(inn.oversLimit * 6 - inn.legalBalls, 0)} balls` : ""}
+
+          <div style={{ fontFamily: FONT_BODY, fontSize: 13, marginTop: 4 }}>
+            {inn.target ? (
+              <span style={{ color: C.tape, fontWeight: 800 }}>
+                Need {runsNeeded} runs in {ballsRem} balls (RRR {rrr})
+              </span>
+            ) : (
+              <span style={{ color: C.inkDim }}>
+                CRR {crr} {inn.legalBalls >= 6 ? ` · Projected: ~${projected} runs` : ""}
+              </span>
+            )}
           </div>
         </div>
+
         {code && (
           <div style={{ textAlign: "right" }}>
             <div style={{ fontFamily: FONT_BODY, fontSize: 10, color: C.inkFaint, fontWeight: 700, letterSpacing: 1 }}>MATCH CODE</div>
@@ -296,15 +312,27 @@ function ScoreHeader({ inn, code }) {
 =========================================================== */
 function App() {
   const [screen, setScreen] = useState("home"); // home | setup | live | break | done | watch
-  const [match, setMatch] = useState(null);
+  const [match, setMatch] = useState(() => loadLocal("tapeball:active_match"));
   const [undoStack, setUndoStack] = useState([]);
   const [completedMatches, setCompletedMatches] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
 
+  // PERSIST ACTIVE MATCH AUTOMATICALLY ON EVERY BALL SCORE
   useEffect(() => {
-    if (!match || !match.code) return;
-    saveLocal(`tapeball:match:${match.code}`, match);
-    if (navigator.onLine) {
-      apiFetch(`/api/match/${match.code}`, 'POST', match);
+    if (!match) {
+      saveLocal("tapeball:active_match", null);
+      return;
+    }
+    if (match.status === "done") {
+      saveLocal("tapeball:active_match", null);
+    } else {
+      saveLocal("tapeball:active_match", match);
+    }
+
+    if (match.code) {
+      saveLocal(`tapeball:match:${match.code}`, match);
+      if (navigator.onLine) {
+        apiFetch(`/api/match/${match.code}`, 'POST', match);
+      }
     }
   }, [match]);
 
@@ -334,6 +362,7 @@ function App() {
       date: new Date().toISOString(),
       innings: m.innings,
     };
+    saveLocal("tapeball:active_match", null);
     setCompletedMatches([...list.filter((x) => x.id !== rec.id), rec]);
   };
 
@@ -341,6 +370,8 @@ function App() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.ink, fontFamily: FONT_BODY, paddingBottom: 30 }}>
       {screen === "home" && (
         <Home
+          activeMatch={match && match.status !== "done" ? match : null}
+          onResume={() => setScreen(match.status === "break" ? "break" : "live")}
           onNew={() => setScreen("setup")}
           onWatch={() => setScreen("watch")}
         />
@@ -386,26 +417,45 @@ function App() {
 }
 
 /* ---------------------------------------------------------
-   HOME SCREEN
+   HOME SCREEN (WITH RESUME UNFINISHED MATCH FEATURE)
 --------------------------------------------------------- */
-function Home({ onNew, onWatch }) {
+function Home({ activeMatch, onResume, onNew, onWatch }) {
   const [history] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
+  const inn = activeMatch && activeMatch.innings ? activeMatch.innings[activeMatch.currentInningsIdx] : null;
+
   return (
     <div className="tb-fadein" style={{ padding: 20 }}>
-      <div style={{ marginTop: 14, marginBottom: 32 }}>
+      <div style={{ marginTop: 14, marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
           <span style={{ fontSize: 11, background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "3px 8px", borderRadius: 999, fontWeight: 700 }}>
-            ⚡ 100% Offline Ready
+            ⚡ Auto-Saved
           </span>
         </div>
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink, marginTop: 8 }}>PRO GROUND<br />SCORECARD</div>
-        <div style={{ color: C.inkDim, fontSize: 14, marginTop: 8 }}>One-tap scoring, interactive No Ball runs, over history & offline caching.</div>
       </div>
 
+      {activeMatch && inn && (
+        <Panel style={{ padding: 16, marginBottom: 20, borderColor: C.tape, background: "rgba(242,169,59,0.08)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Label>⚠️ Unfinished Match Found</Label>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.tape, fontWeight: 700 }}>Code: {activeMatch.code}</span>
+          </div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, color: C.ink, marginTop: 4 }}>
+            {activeMatch.teamA} vs {activeMatch.teamB}
+          </div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 14, color: C.inkDim, marginTop: 2 }}>
+            Current Score: {inn.battingTeam} {inn.score}/{inn.wkts} ({oversStr(inn.legalBalls)} ov)
+          </div>
+          <BigButton onClick={onResume} bg={C.win} color="#0A1F0B" style={{ marginTop: 12, width: "100%", padding: 14, fontFamily: FONT_DISPLAY, fontSize: 20 }}>
+            ▶ Resume Match Right Now
+          </BigButton>
+        </Panel>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <BigButton onClick={onNew} bg={C.tape} color="#1A1305" style={{ padding: "20px", fontSize: 22, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          ▶ Start New Match
+        <BigButton onClick={onNew} bg={activeMatch ? C.panel2 : C.tape} color={activeMatch ? C.ink : "#1A1305"} style={{ padding: "18px", fontSize: 22, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
+          + Start New Match
         </BigButton>
         <BigButton onClick={onWatch} style={{ padding: "16px 20px", fontSize: 17, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
           📡 Watch Live Match (Code Sync)
@@ -517,7 +567,7 @@ function Setup({ onCancel, onStart }) {
 }
 
 /* ---------------------------------------------------------
-   LIVE SCORER (INTERACTIVE NO BALL RUNS & SWAP BATSMAN)
+   LIVE SCORER ENGINE
 --------------------------------------------------------- */
 function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, onExit }) {
   const inn = match.innings[match.currentInningsIdx];
@@ -633,7 +683,6 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     setMatch(m3);
   }
 
-  // ONE-TAP WIDE
   function applyWide() {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
@@ -653,14 +702,13 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
     setMatch(m3);
   }
 
-  // INTERACTIVE NO BALL (ASK RUNS OFF BAT: 0, 1, 2, 3, 4, 6)
   function applyNoBall(runsOffBat) {
     const m2 = structuredClone(match);
     const inn2 = m2.innings[m2.currentInningsIdx];
     const bat = inn2.batsmen[inn2.striker];
     const bowl = inn2.bowlers[inn2.currentBowler];
 
-    const totalRunsThisBall = 1 + runsOffBat; // 1 NB extra + runs off bat
+    const totalRunsThisBall = 1 + runsOffBat;
 
     inn2.extras.nb += 1;
     inn2.score += totalRunsThisBall;
