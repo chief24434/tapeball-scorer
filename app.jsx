@@ -423,6 +423,36 @@ function calculateOverallLeaderboard(completedMatches = [], nslTeams = DEFAULT_N
 }
 
 /* ---------------------------------------------------------
+   MATCH TOP PERFORMERS (MOST RUNS & MOST WICKETS PER MATCH)
+--------------------------------------------------------- */
+function getMatchTopPerformers(m) {
+  let topBatsman = null;
+  let topBowler = null;
+
+  (m.innings || []).forEach((inn) => {
+    if (!inn) return;
+    Object.values(inn.batsmen || {}).forEach((b) => {
+      if (!b || (!b.runs && !b.balls && !b.out)) return;
+      if (!topBatsman || b.runs > topBatsman.runs || (b.runs === topBatsman.runs && b.balls < topBatsman.balls)) {
+        const sr = b.balls > 0 ? (b.runs / b.balls) * 100 : 0;
+        topBatsman = { ...b, team: inn.battingTeam, sr };
+      }
+    });
+
+    Object.values(inn.bowlers || {}).forEach((bw) => {
+      if (!bw || (!bw.balls && !bw.runs && !bw.wkts)) return;
+      if (!topBowler || bw.wkts > topBowler.wkts || (bw.wkts === topBowler.wkts && bw.runs < topBowler.runs)) {
+        const ovs = bw.balls / 6;
+        const econ = ovs > 0 ? bw.runs / ovs : 0;
+        topBowler = { ...bw, team: inn.bowlingTeam, econ };
+      }
+    });
+  });
+
+  return { topBatsman, topBowler };
+}
+
+/* ---------------------------------------------------------
    COMMENTARY GENERATOR
 --------------------------------------------------------- */
 function createCommentaryText(ballData, batsmanName, bowlerName) {
@@ -1396,7 +1426,7 @@ function MatchSetupModal({ schedMatch, nslTeams, onClose, onStartMatchLive, onAd
               <BigButton
                 onClick={() => {
                   setTossDecision("bat");
-                  setSetupStep("openers");
+                  setSetupStep("playingXI");
                 }}
                 bg={C.win}
                 color="#0A110D"
@@ -1409,7 +1439,7 @@ function MatchSetupModal({ schedMatch, nslTeams, onClose, onStartMatchLive, onAd
               <BigButton
                 onClick={() => {
                   setTossDecision("bowl");
-                  setSetupStep("openers");
+                  setSetupStep("playingXI");
                 }}
                 bg={C.free}
                 color="#0A110D"
@@ -1432,7 +1462,134 @@ function MatchSetupModal({ schedMatch, nslTeams, onClose, onStartMatchLive, onAd
           </Panel>
         )}
 
-        {/* STEP 3: SELECT STRIKER, NON-STRIKER & OPENING BOWLER */}
+        {/* STEP 3: SELECT PLAYING XI FOR BOTH TEAMS */}
+        {setupStep === "playingXI" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ padding: "8px 12px", background: "rgba(242,169,59,0.12)", border: `1px solid ${C.tape}`, borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 12, color: C.tape, fontWeight: 700 }}>
+                🪙 {winnerObj?.short || tossWinner} won toss & elected to {tossDecision.toUpperCase()} first
+              </div>
+              <button
+                onClick={() => setSetupStep("decision")}
+                style={{ background: "none", border: "none", color: C.inkDim, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+              >
+                Change Toss
+              </button>
+            </div>
+
+            {/* TEAM A PLAYING XI SELECTION */}
+            <Panel style={{ padding: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <TeamLogo shortKey={teamAKey} size={20} />
+                  <Label>{teamA.name} Playing Squad</Label>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.tape }}>
+                  {selectedA.length} Selected
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: C.inkDim, marginBottom: 8 }}>
+                Select players in the playing lineup for this match:
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 120, overflowY: "auto" }}>
+                {(teamA.players || []).map((p) => {
+                  const isSel = selectedA.includes(p);
+                  return (
+                    <Chip
+                      key={p}
+                      active={isSel}
+                      onClick={() => {
+                        setSelectedA((prev) => isSel ? prev.filter((x) => x !== p) : [...prev, p]);
+                      }}
+                      style={{ fontSize: 11, padding: "5px 9px" }}
+                    >
+                      {isSel ? "✓ " : "+ "}{p}
+                    </Chip>
+                  );
+                })}
+              </div>
+            </Panel>
+
+            {/* TEAM B PLAYING XI SELECTION */}
+            <Panel style={{ padding: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <TeamLogo shortKey={teamBKey} size={20} />
+                  <Label>{teamB.name} Playing Squad</Label>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.tape }}>
+                  {selectedB.length} Selected
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: C.inkDim, marginBottom: 8 }}>
+                Select players in the playing lineup for this match:
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 120, overflowY: "auto" }}>
+                {(teamB.players || []).map((p) => {
+                  const isSel = selectedB.includes(p);
+                  return (
+                    <Chip
+                      key={p}
+                      active={isSel}
+                      onClick={() => {
+                        setSelectedB((prev) => isSel ? prev.filter((x) => x !== p) : [...prev, p]);
+                      }}
+                      style={{ fontSize: 11, padding: "5px 9px" }}
+                    >
+                      {isSel ? "✓ " : "+ "}{p}
+                    </Chip>
+                  );
+                })}
+              </div>
+            </Panel>
+
+            {/* EMERGENCY SQUAD ADDITION */}
+            <Panel style={{ padding: 12 }}>
+              <Label style={{ fontSize: 11 }}>+ Add Emergency Player to Squad</Label>
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                <select
+                  value={emergencyTeam}
+                  onChange={(e) => setEmergencyTeam(e.target.value)}
+                  style={{ padding: "6px 8px", background: C.panel2, border: `1px solid ${C.panelBorder}`, color: C.ink, borderRadius: 6, fontSize: 11 }}
+                >
+                  <option value={teamAKey}>{teamA.short || teamAKey}</option>
+                  <option value={teamBKey}>{teamB.short || teamBKey}</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Player full name"
+                  value={emergencyName}
+                  onChange={(e) => setEmergencyName(e.target.value)}
+                  style={{ flex: 1, padding: "6px 8px", background: C.panel2, border: `1px solid ${C.panelBorder}`, color: C.ink, borderRadius: 6, fontSize: 11 }}
+                />
+                <button
+                  onClick={handleAddEmergencyPlayer}
+                  className="tb-btn"
+                  style={{ background: C.tape, color: "#0A110D", border: "none", borderRadius: 6, padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                >
+                  Add
+                </button>
+              </div>
+            </Panel>
+
+            <BigButton
+              onClick={() => {
+                if (selectedA.length < 2 || selectedB.length < 2) {
+                  alert("Please select at least 2 players for each team's lineup!");
+                  return;
+                }
+                setSetupStep("openers");
+              }}
+              bg={C.tape}
+              color="#0A110D"
+              style={{ width: "100%", padding: "12px 0", fontSize: 15, fontWeight: 800 }}
+            >
+              Confirm Lineups & Select Openers ➔
+            </BigButton>
+          </div>
+        )}
+
+        {/* STEP 4: SELECT STRIKER, NON-STRIKER & OPENING BOWLER */}
         {setupStep === "openers" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             
@@ -1601,10 +1758,16 @@ function LiveScoringCentre({
   const [wicketModal, setWicketModal] = useState(false);
   const [bowlerModal, setBowlerModal] = useState(() => !inn.currentBowler);
   const [newBatsmanModal, setNewBatsmanModal] = useState(null);
-  const [extrasModal, setExtrasModal] = useState(false);
+  const [superballActive, setSuperballActive] = useState(false);
   const [activeTab, setActiveTab] = useState("score");
   const [emergencyBatsmanName, setEmergencyBatsmanName] = useState("");
   const [emergencyBowlerName, setEmergencyBowlerName] = useState("");
+
+  const currentOverNum = Math.floor(inn.legalBalls / 6) + 1;
+  const isEligibleOverForSuperball = currentOverNum > 1 && currentOverNum < inn.oversLimit;
+  const strikerBat = inn.striker ? inn.batsmen[inn.striker] : null;
+  const strikerSuperballUsed = Boolean(strikerBat?.superballUsed);
+  const canCallSuperball = isEligibleOverForSuperball && !strikerSuperballUsed;
 
   const striker = inn.striker ? inn.batsmen[inn.striker] : null;
   const nonStriker = inn.nonStriker ? inn.batsmen[inn.nonStriker] : null;
@@ -1685,32 +1848,46 @@ function LiveScoringCentre({
     const bat = inn2.batsmen[inn2.striker];
     const bowl = inn2.bowlers[inn2.currentBowler];
 
+    const isSB = superballActive;
+    // Superball rules: runs scored by batsman are doubled (e.g. six = 12 runs, 0 = 0)
+    const effectiveRuns = isSB ? (runs * 2) : runs;
+
     if (bat) {
-      bat.runs += runs;
+      bat.runs += effectiveRuns;
       bat.balls += 1;
       if (runs === 4) bat.fours = (bat.fours || 0) + 1;
       if (runs === 6) bat.sixes = (bat.sixes || 0) + 1;
+      if (isSB) bat.superballUsed = true;
     }
     if (bowl) {
-      bowl.runs += runs;
+      bowl.runs += effectiveRuns;
       bowl.balls += 1;
     }
 
-    inn2.score += runs;
+    inn2.score += effectiveRuns;
     inn2.legalBalls += 1;
-    inn2.curOverRuns += runs;
+    inn2.curOverRuns += effectiveRuns;
     inn2.freeHit = false;
 
-    const ballLabel = runs === 0 ? "•" : String(runs);
-    const ballData = { type: "run", runs, label: ballLabel };
+    const ballLabel = isSB
+      ? (runs === 0 ? "SB:•" : `SB:${effectiveRuns}`)
+      : (runs === 0 ? "•" : String(runs));
+    const ballData = { type: "run", runs: effectiveRuns, label: ballLabel, isSuperball: isSB };
     inn2.currentOverBalls.push(ballData);
 
-    const cText = createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
+    const cText = isSB
+      ? (runs === 0
+          ? `⚡ SUPERBALL: ${inn2.striker} dots the ball. No runs scored.`
+          : `⚡ SUPERBALL! ${inn2.striker} hits for ${effectiveRuns} RUNS (${runs} doubled)!`)
+      : createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
+
     inn2.commentary.unshift({
       over: oversStr(inn2.legalBalls),
       text: cText,
       type: runs === 6 ? "six" : runs === 4 ? "four" : runs === 0 ? "dot" : "run"
     });
+
+    if (isSB) setSuperballActive(false);
 
     if (runs % 2 === 1) {
       const t = inn2.striker;
@@ -1751,7 +1928,9 @@ function LiveScoringCentre({
     const ballData = { type: "wide", runs: totalRuns, label: extraRuns > 0 ? `wd+${extraRuns}` : "wd" };
     inn2.currentOverBalls.push(ballData);
 
-    const cText = createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
+    const cText = superballActive
+      ? `Wide called. Superball remains active for re-bowl.`
+      : createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
     inn2.commentary.unshift({ over: oversStr(inn2.legalBalls), text: cText, type: "wide" });
 
     if (extraRuns % 2 === 1) {
@@ -1797,7 +1976,9 @@ function LiveScoringCentre({
     const ballData = { type: "noball", runs: totalRuns, label };
     inn2.currentOverBalls.push(ballData);
 
-    const cText = createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
+    const cText = superballActive
+      ? `NO BALL! Extra run and Free Hit awarded! Superball remains active.`
+      : createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
     inn2.commentary.unshift({ over: oversStr(inn2.legalBalls), text: cText, type: "noball" });
 
     if (runsOffBat % 2 === 1) {
@@ -1814,57 +1995,6 @@ function LiveScoringCentre({
     setMatch(m3);
   }
 
-  function applyExtras(type, runs = 1) {
-    if (!inn.currentBowler) {
-      setBowlerModal(true);
-      return;
-    }
-    const m2 = structuredClone(match);
-    const inn2 = m2.innings[m2.currentInningsIdx];
-    const bat = inn2.batsmen[inn2.striker];
-    const bowl = inn2.bowlers[inn2.currentBowler];
-
-    if (type === "b") inn2.extras.b += runs;
-    else if (type === "lb") inn2.extras.lb += runs;
-
-    inn2.score += runs;
-    inn2.legalBalls += 1;
-    inn2.curOverRuns += runs;
-
-    if (bat) bat.balls += 1;
-    if (bowl) bowl.balls += 1;
-    inn2.freeHit = false;
-
-    const label = `${runs}${type.toUpperCase()}`;
-    const ballData = { type: type === "b" ? "bye" : "legbye", runs, label };
-    inn2.currentOverBalls.push(ballData);
-
-    const cText = createCommentaryText(ballData, inn2.striker, inn2.currentBowler);
-    inn2.commentary.unshift({ over: oversStr(inn2.legalBalls), text: cText, type: "extra" });
-
-    if (runs % 2 === 1) {
-      const t = inn2.striker;
-      inn2.striker = inn2.nonStriker;
-      inn2.nonStriker = t;
-    }
-
-    const { m2: m3, ended, toBreak } = checkInningsEnd(m2, inn2);
-    setExtrasModal(false);
-
-    if (ended) {
-      if (toBreak) { setMatch(m3); onInningsBreak(m3); return; }
-      else { onMatchDone(m3); return; }
-    }
-
-    if (inn2.legalBalls % 6 === 0) {
-      finishOver(m3, inn2);
-      setMatch(m3);
-      setBowlerModal(true);
-      return;
-    }
-    setMatch(m3);
-  }
-
   function applyWicket({ outType, whoOut, runsCompleted, newBatsmanName }) {
     if (!inn.currentBowler) {
       setBowlerModal(true);
@@ -1875,6 +2005,15 @@ function LiveScoringCentre({
     const bowl = inn2.bowlers[inn2.currentBowler];
     const outPlayerName = whoOut === "striker" ? inn2.striker : inn2.nonStriker;
     const bat = inn2.batsmen[outPlayerName];
+
+    const isSB = superballActive && whoOut === "striker";
+    const isBowled = outType === "bowled";
+
+    if (isSB && isBowled) {
+      // Superball rule: If batsman gets bowled, app cuts 5 runs!
+      inn2.score = Math.max(0, inn2.score - 5);
+      inn2.curOverRuns = Math.max(0, inn2.curOverRuns - 5);
+    }
 
     if (runsCompleted > 0) {
       const scoringBat = inn2.batsmen[inn2.striker];
@@ -1892,6 +2031,7 @@ function LiveScoringCentre({
       if (outType !== "retired") {
         bat.balls += outType === "run out" ? 0 : 1;
       }
+      if (isSB) bat.superballUsed = true;
     }
 
     if (outType !== "run out" && outType !== "retired" && bowl) {
@@ -1905,12 +2045,17 @@ function LiveScoringCentre({
       inn2.legalBalls += 1;
       inn2.wkts += 1;
       inn2.curOverWkts += 1;
-      inn2.currentOverBalls.push({ type: "wicket", outType, label: "W" });
+      const wLabel = (isSB && isBowled) ? "SB:W(-5)" : (isSB ? "SB:W" : "W");
+      inn2.currentOverBalls.push({ type: "wicket", outType, label: wLabel, isSuperball: isSB });
     }
     inn2.freeHit = false;
 
-    const cText = createCommentaryText({ type: "wicket", outType }, outPlayerName, inn2.currentBowler);
+    const cText = (isSB && isBowled)
+      ? `⚡ SUPERBALL BOWLED! ${outPlayerName} was BOWLED on Superball! 5 runs deducted from ${inn2.battingTeam}!`
+      : createCommentaryText({ type: "wicket", outType }, outPlayerName, inn2.currentBowler);
     inn2.commentary.unshift({ over: oversStr(inn2.legalBalls), text: cText, type: "wicket" });
+
+    if (isSB) setSuperballActive(false);
 
     const allOutNow = inn2.wkts >= maxWktsAllowed;
     if (!allOutNow && newBatsmanName) {
@@ -2150,21 +2295,49 @@ function LiveScoringCentre({
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 10 }}>
-            {[0, 1, 2, 3, 4, 6].map((num) => (
-              <BigButton
-                key={num}
-                onClick={() => applyRuns(num)}
-                bg={num === 6 ? C.tape : num === 4 ? C.win : C.panel2}
-                color={num === 6 || num === 4 ? "#0A110D" : C.ink}
-                style={{ padding: "12px 0", fontSize: 20, fontFamily: FONT_DISPLAY }}
+          {superballActive && (
+            <div style={{
+              background: "linear-gradient(135deg, rgba(242,169,59,0.25), rgba(242,102,29,0.2))",
+              border: `1.5px solid ${C.tape}`,
+              borderRadius: 8,
+              padding: "6px 12px",
+              marginBottom: 10,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.tape }}>
+                ⚡ SUPERBALL ACTIVE • {inn.striker}
+              </div>
+              <button
+                onClick={() => setSuperballActive(false)}
+                style={{ background: "none", border: "none", color: C.inkDim, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
               >
-                {num === 0 ? "•" : num}
-              </BigButton>
-            ))}
+                Cancel
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 10 }}>
+            {[0, 1, 2, 3, 4, 6].map((num) => {
+              const label = superballActive
+                ? (num === 0 ? "• (0)" : `${num} (${num * 2})`)
+                : (num === 0 ? "•" : num);
+              return (
+                <BigButton
+                  key={num}
+                  onClick={() => applyRuns(num)}
+                  bg={superballActive ? (num === 6 ? C.tape : num === 4 ? C.win : "rgba(242,169,59,0.2)") : (num === 6 ? C.tape : num === 4 ? C.win : C.panel2)}
+                  color={num === 6 || num === 4 ? "#0A110D" : (superballActive ? C.tape : C.ink)}
+                  style={{ padding: "12px 0", fontSize: superballActive && num !== 0 ? 15 : 20, fontFamily: FONT_DISPLAY }}
+                >
+                  {label}
+                </BigButton>
+              );
+            })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr 1.5fr", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.3fr 1.3fr", gap: 8 }}>
             <BigButton
               onClick={() => applyWide(0)}
               bg="rgba(79,168,214,0.15)"
@@ -2184,12 +2357,28 @@ function LiveScoringCentre({
             </BigButton>
 
             <BigButton
-              onClick={() => setExtrasModal(true)}
-              bg={C.panel2}
-              color={C.ink}
-              style={{ border: `1px solid ${C.panelBorder}`, padding: "10px 0", fontSize: 13 }}
+              onClick={() => {
+                if (!isEligibleOverForSuperball) {
+                  alert(`Superball can only be called in overs 2 to ${inn.oversLimit - 1} (Not allowed in 1st or last over)!`);
+                  return;
+                }
+                if (strikerSuperballUsed) {
+                  alert(`Superball has already been used by ${inn.striker}!`);
+                  return;
+                }
+                setSuperballActive((prev) => !prev);
+              }}
+              disabled={!canCallSuperball && !superballActive}
+              bg={superballActive ? "linear-gradient(135deg, #F2A93B, #F2661D)" : canCallSuperball ? "rgba(242,169,59,0.18)" : C.panel2}
+              color={superballActive ? "#0A110D" : canCallSuperball ? C.tape : C.inkFaint}
+              style={{
+                border: `1px solid ${superballActive ? "#F2A93B" : canCallSuperball ? C.tape : C.panelBorder}`,
+                padding: "10px 0",
+                fontSize: 12,
+                fontWeight: 800
+              }}
             >
-              BYE / LB ▾
+              {superballActive ? "⚡ SB ON" : canCallSuperball ? "⚡ SUPERBALL" : strikerSuperballUsed ? "⚡ SB Used" : "⚡ SB (Ov 2-7)"}
             </BigButton>
 
             <BigButton
@@ -2469,33 +2658,7 @@ function LiveScoringCentre({
         </ModalShell>
       )}
 
-      {extrasModal && (
-        <ModalShell title="Record Byes / Leg-Byes" onClose={() => setExtrasModal(false)}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div>
-              <Label>Byes (B) — Runs off no bat contact</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                {[1, 2, 3, 4].map((n) => (
-                  <Chip key={n} active={false} onClick={() => applyExtras("b", n)}>
-                    +{n} Bye
-                  </Chip>
-                ))}
-              </div>
-            </div>
 
-            <div>
-              <Label>Leg-Byes (LB) — Runs off pad/body contact</Label>
-              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                {[1, 2, 3, 4].map((n) => (
-                  <Chip key={n} active={false} onClick={() => applyExtras("lb", n)}>
-                    +{n} Leg-Bye
-                  </Chip>
-                ))}
-              </div>
-            </div>
-          </div>
-        </ModalShell>
-      )}
     </div>
   );
 }
@@ -3033,6 +3196,9 @@ function LeaderboardsScreen({ completedMatches, nslTeams, onSelectPlayer }) {
         <Chip active={tab === "mvp"} onClick={() => setTab("mvp")}>
           👑 Tournament MVP
         </Chip>
+        <Chip active={tab === "matchCaps"} onClick={() => setTab("matchCaps")} color={C.tape}>
+          🎖️ Match Top Performers
+        </Chip>
       </div>
 
       {tab === "orange" && (
@@ -3204,6 +3370,106 @@ function LeaderboardsScreen({ completedMatches, nslTeams, onSelectPlayer }) {
           </table>
         </Panel>
       )}
+
+      {tab === "matchCaps" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <Panel style={{ padding: 14, background: "rgba(242,169,59,0.08)", border: `1px solid ${C.tape}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 24 }}>🎖️</span>
+              <div>
+                <Label style={{ color: C.tape }}>MATCH-BY-MATCH TOP PERFORMERS</Label>
+                <div style={{ fontSize: 11, color: C.inkDim }}>
+                  Highest run scorer and most wickets taker for each match (regardless of win or loss)
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          {(completedMatches || []).length === 0 ? (
+            <Panel style={{ padding: 24, textAlign: "center" }}>
+              <div style={{ fontSize: 32 }}>🏏</div>
+              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 20, marginTop: 6 }}>No Matches Completed Yet</div>
+              <div style={{ fontSize: 12, color: C.inkDim, marginTop: 4 }}>
+                As group and playoff matches finish, each match's top run scorer and top wicket taker will be highlighted here!
+              </div>
+            </Panel>
+          ) : (
+            completedMatches.map((m, idx) => {
+              const { topBatsman, topBowler } = getMatchTopPerformers(m);
+              return (
+                <Panel key={m.id || idx} style={{ padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.panelBorder}`, paddingBottom: 8, marginBottom: 10 }}>
+                    <div>
+                      <span style={{ fontSize: 11, color: C.tape, fontWeight: 800 }}>
+                        {m.stageName || `Match ${m.matchNum || idx + 1}`}
+                      </span>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 18 }}>
+                        {m.teamA} vs {m.teamB}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 11, color: C.win, fontWeight: 700 }}>{m.result}</div>
+                      <div style={{ fontSize: 10, color: C.inkDim }}>
+                        {m.scoreA} · {m.scoreB}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    {/* TOP RUN SCORER */}
+                    <div style={{ background: C.panel2, borderRadius: 8, padding: 10, borderLeft: `3px solid ${C.orangeCap}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 14 }}>🟠</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: C.orangeCap, textTransform: "uppercase" }}>
+                          Top Run Scorer
+                        </span>
+                      </div>
+                      {topBatsman ? (
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: C.ink }}>{topBatsman.name}</div>
+                          <div style={{ fontSize: 10, color: C.inkDim }}>{topBatsman.team}</div>
+                          <div style={{ fontFamily: FONT_MONO, fontSize: 13, color: C.tape, fontWeight: 800, marginTop: 4 }}>
+                            {topBatsman.runs} runs <span style={{ fontSize: 11, color: C.inkDim, fontWeight: 400 }}>({topBatsman.balls}b)</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: C.inkFaint, marginTop: 2 }}>
+                            {topBatsman.fours || 0} 4s · {topBatsman.sixes || 0} 6s · SR {topBatsman.sr?.toFixed(0)}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: C.inkFaint }}>No runs recorded</div>
+                      )}
+                    </div>
+
+                    {/* TOP WICKET TAKER */}
+                    <div style={{ background: C.panel2, borderRadius: 8, padding: 10, borderLeft: `3px solid ${C.purpleCap}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 14 }}>🟣</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: C.purpleCap, textTransform: "uppercase" }}>
+                          Top Wicket Taker
+                        </span>
+                      </div>
+                      {topBowler ? (
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: C.ink }}>{topBowler.name}</div>
+                          <div style={{ fontSize: 10, color: C.inkDim }}>{topBowler.team}</div>
+                          <div style={{ fontFamily: FONT_MONO, fontSize: 13, color: C.purpleCap, fontWeight: 800, marginTop: 4 }}>
+                            {topBowler.wkts} wkts <span style={{ fontSize: 11, color: C.inkDim, fontWeight: 400 }}>({topBowler.runs}R in {oversStr(topBowler.balls)} ov)</span>
+                          </div>
+                          <div style={{ fontSize: 10, color: C.inkFaint, marginTop: 2 }}>
+                            Econ: {topBowler.econ?.toFixed(1)}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11, color: C.inkFaint }}>No wickets recorded</div>
+                      )}
+                    </div>
+                  </div>
+                </Panel>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -3211,9 +3477,20 @@ function LeaderboardsScreen({ completedMatches, nslTeams, onSelectPlayer }) {
 /* =========================================================================
    PHASE 3: TEAMS & PLAYER SQUAD ROSTER SCREEN
    ========================================================================= */
-function TeamsScreen({ nslTeams, onSelectPlayer }) {
+function TeamsScreen({ nslTeams, onSelectPlayer, onAddPlayer }) {
   const [selectedTeamKey, setSelectedTeamKey] = useState("KTG");
+  const [newPlayerName, setNewPlayerName] = useState("");
   const team = nslTeams[selectedTeamKey] || {};
+
+  const handleAddNewPlayer = () => {
+    if (!newPlayerName.trim()) return;
+    const clean = newPlayerName.trim();
+    if (onAddPlayer) {
+      onAddPlayer(selectedTeamKey, clean);
+    }
+    setNewPlayerName("");
+    alert(`Successfully added ${clean} to ${team.name} squad!`);
+  };
 
   return (
     <div className="tb-fadein" style={{ padding: "16px 16px 80px", maxWidth: 720, margin: "0 auto" }}>
@@ -3281,6 +3558,37 @@ function TeamsScreen({ nslTeams, onSelectPlayer }) {
                 </div>
               );
             })}
+          </div>
+
+          {/* ADD PLAYER TO SQUAD */}
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.panelBorder}` }}>
+            <Label style={{ marginBottom: 6 }}>+ Add Player to {team.name} Squad</Label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Enter player full name (e.g. Adeel M)..."
+                value={newPlayerName}
+                onChange={(e) => setNewPlayerName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddNewPlayer(); }}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  background: C.panel2,
+                  border: `1px solid ${C.panelBorder}`,
+                  color: C.ink,
+                  borderRadius: 6,
+                  fontSize: 13
+                }}
+              />
+              <BigButton
+                onClick={handleAddNewPlayer}
+                bg={C.tape}
+                color="#0A110D"
+                style={{ padding: "8px 16px", fontSize: 13, fontWeight: 800 }}
+              >
+                + Add Player
+              </BigButton>
+            </div>
           </div>
         </div>
       </Panel>
@@ -4220,6 +4528,7 @@ function App() {
         <TeamsScreen
           nslTeams={nslTeams}
           onSelectPlayer={(pName) => setSelectedPlayer(pName)}
+          onAddPlayer={handleAddPlayer}
         />
       )}
 
