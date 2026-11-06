@@ -1,15 +1,15 @@
 {
-  "short_name": "Tapeball",
-  "name": "Tapeball Ground Scorer",
+  "short_name": "NSL Scorecard",
+  "name": "NSL Scorecard — Premier League",
   "icons": [
     {
-      "src": "icon-192.png",
-      "type": "image/png",
+      "src": "assets/logos/ktg.jpg",
+      "type": "image/jpeg",
       "sizes": "192x192"
     },
     {
-      "src": "icon-512.png",
-      "type": "image/png",
+      "src": "assets/logos/ktg.jpg",
+      "type": "image/jpeg",
       "sizes": "512x512"
     }
   ],

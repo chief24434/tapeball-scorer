@@ -4,19 +4,19 @@ const { useState, useEffect, useRef, useCallback } = React;
    COLOR PALETTE & CONSTANTS
 --------------------------------------------------------- */
 const C = {
-  bg: "#0D1712",
-  bg2: "#0A130F",
-  panel: "#15241C",
-  panel2: "#1B2E23",
-  panelBorder: "#2A3E30",
-  tape: "#F2A93B",       // Tape-ball amber
-  tape2: "#F2661D",      // Tape-ball orange
-  wicket: "#D14B41",
+  bg: "#0A110D",
+  bg2: "#0E1813",
+  panel: "#14221A",
+  panel2: "#1A2D23",
+  panelBorder: "#273E30",
+  tape: "#F2A93B",       // NSL Gold
+  tape2: "#F2661D",      // NSL Orange
+  wicket: "#E0483B",
   free: "#4FA8D6",
-  ink: "#F4F1E6",
-  inkDim: "#9AAD9F",
-  inkFaint: "#5E7267",
-  win: "#6FBF73",
+  ink: "#F5F3EC",
+  inkDim: "#9EB0A3",
+  inkFaint: "#607569",
+  win: "#52C474",
 };
 
 const FONT_DISPLAY = "'Teko', system-ui, -apple-system, sans-serif";
@@ -24,7 +24,72 @@ const FONT_BODY = "'Manrope', system-ui, -apple-system, sans-serif";
 const FONT_MONO = "'Space Mono', monospace";
 
 /* ---------------------------------------------------------
-   LOCAL STORAGE & VPS BACKEND HYBRID ENGINE
+   NSL DEFAULT TEAMS & ROSTERS
+--------------------------------------------------------- */
+const DEFAULT_NSL_TEAMS = {
+  KTG: {
+    id: "KTG",
+    name: "KHAN TIGERS",
+    short: "KTG",
+    logo: "assets/logos/ktg.jpg",
+    captain: "Arbaz M",
+    players: [
+      "Arbaz M (C)", "Azhar M", "Farhan Iq", "Farhan J", "Amir K", "Adeel K",
+      "Zohaib Ir", "Saqib G", "Ghayoor A", "Faheem D", "Ayaz D", "Aliyan S"
+    ]
+  },
+  ASK: {
+    id: "ASK",
+    name: "ARSLAN ASLAM SUPER KINGS",
+    short: "ASK",
+    logo: "assets/logos/ask.jpg",
+    captain: "Aslam K",
+    players: [
+      "Aslam K (C)", "Shahzad M", "Kashif K", "Zeeshan Iq", "Irfan F", "Ali N",
+      "Noman Ij", "Atif M", "Hasan J", "Danish R"
+    ]
+  },
+  NKG: {
+    id: "NKG",
+    name: "NAWAB KINGS",
+    short: "NKG",
+    logo: "assets/logos/nkg.jpg",
+    captain: "AKHTIAR H",
+    players: [
+      "AKHTIAR H (C)", "Zeehsan Sh", "Asim P", "Amir Ib", "Sadeeq D", "Rehan J",
+      "Shabeer D", "Ali B", "Saqib S", "Ayan A"
+    ]
+  },
+  ALW: {
+    id: "ALW",
+    name: "ALI WALY",
+    short: "ALW",
+    logo: "assets/logos/alw.jpg",
+    captain: "Imtiaz K",
+    players: [
+      "Imtiaz K (C)", "Saddam D", "Ijaz H", "Saqlain Ir", "Hasan Ch", "Shahzad R",
+      "Bilal D", "Asad D", "Azhar Cf", "Aftab Im"
+    ]
+  }
+};
+
+/* ---------------------------------------------------------
+   NSL 6-MATCH ROUND 1 FIXTURES + PLAYOFFS
+--------------------------------------------------------- */
+const DEFAULT_SCHEDULE = [
+  { id: "m1", matchNum: 1, round: 1, teamA: "ASK", teamB: "KTG", status: "pending", result: "", winner: "", stageName: "Round 1 · Match 1" },
+  { id: "m2", matchNum: 2, round: 1, teamA: "ALW", teamB: "NKG", status: "pending", result: "", winner: "", stageName: "Round 1 · Match 2" },
+  { id: "m3", matchNum: 3, round: 1, teamA: "ASK", teamB: "ALW", status: "pending", result: "", winner: "", stageName: "Round 1 · Match 3" },
+  { id: "m4", matchNum: 4, round: 1, teamA: "KTG", teamB: "NKG", status: "pending", result: "", winner: "", stageName: "Round 1 · Match 4" },
+  { id: "m5", matchNum: 5, round: 1, teamA: "ASK", teamB: "NKG", status: "pending", result: "", winner: "", stageName: "Round 1 · Match 5" },
+  { id: "m6", matchNum: 6, round: 1, teamA: "ALW", teamB: "KTG", status: "pending", result: "", winner: "", stageName: "Round 1 · Match 6" },
+  // Playoff slots automatically unlocked once all 6 group matches complete:
+  { id: "m7", matchNum: 7, round: 2, teamA: "Rank 2", teamB: "Rank 3", status: "locked", result: "", winner: "", isPlayoff: true, stageName: "KNOCKOUT QUALIFIER (2nd vs 3rd)" },
+  { id: "m8", matchNum: 8, round: 3, teamA: "Rank 1", teamB: "Winner Knockout", status: "locked", result: "", winner: "", isPlayoff: true, stageName: "GRAND FINAL" }
+];
+
+/* ---------------------------------------------------------
+   LOCAL STORAGE & VPS HYBRID ENGINE
 --------------------------------------------------------- */
 function saveLocal(key, value) {
   try {
@@ -59,12 +124,15 @@ async function apiFetch(endpoint, method = 'GET', data = null) {
   }
 }
 
-function useStorageSync(key, apiPath = null) {
-  const [data, setData] = useState(() => loadLocal(key));
+function useStorageSync(key, defaultVal, apiPath = null) {
+  const [data, setData] = useState(() => {
+    const existing = loadLocal(key);
+    return existing !== null ? existing : defaultVal;
+  });
 
   const syncData = useCallback(async () => {
     const local = loadLocal(key);
-    setData(local);
+    if (local !== null) setData(local);
     if (apiPath && navigator.onLine) {
       const remote = await apiFetch(apiPath, 'GET');
       if (remote !== null && JSON.stringify(remote) !== JSON.stringify(local)) {
@@ -97,7 +165,7 @@ function useStorageSync(key, apiPath = null) {
 }
 
 /* ---------------------------------------------------------
-   HELPERS
+   HELPERS & MATH
 --------------------------------------------------------- */
 function genCode() {
   return String(Math.floor(1000 + Math.random() * 9000));
@@ -127,7 +195,7 @@ function emptyBowler(name) {
   return { name, runs: 0, balls: 0, wkts: 0, overLog: [] };
 }
 
-function newInnings(battingTeam, bowlingTeam, battingPlayers = [], bowlingPlayers = [], oversLimit, target = null) {
+function newInnings(battingTeam, bowlingTeam, battingPlayers = [], bowlingPlayers = [], oversLimit = 8, target = null) {
   return {
     battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, oversLimit,
     target: target || null,
@@ -198,7 +266,7 @@ function TextInput(props) {
   );
 }
 
-function Chip({ children, onClick, active }) {
+function Chip({ children, onClick, active, style }) {
   return (
     <button
       onClick={onClick}
@@ -206,8 +274,9 @@ function Chip({ children, onClick, active }) {
       style={{
         padding: "6px 12px", borderRadius: 999, fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700,
         border: `1px solid ${active ? C.tape : C.panelBorder}`,
-        background: active ? "rgba(242,169,59,0.15)" : "transparent",
+        background: active ? "rgba(242,169,59,0.18)" : "transparent",
         color: active ? C.tape : C.inkDim, cursor: "pointer",
+        ...style,
       }}
     >
       {children}
@@ -228,6 +297,21 @@ function BackBar({ title, onBack, right }) {
       </div>
       {right}
     </div>
+  );
+}
+
+function TeamLogo({ teamKey, size = "md", style }) {
+  const team = DEFAULT_NSL_TEAMS[teamKey];
+  const logoSrc = team ? team.logo : "assets/logos/ktg.jpg";
+  const sizeClass = size === "sm" ? "team-logo-sm" : size === "lg" ? "team-logo-lg" : "team-logo-md";
+  return (
+    <img
+      src={logoSrc}
+      alt={team ? team.short : teamKey}
+      className={sizeClass}
+      style={style}
+      onError={(e) => { e.target.style.display = 'none'; }}
+    />
   );
 }
 
@@ -253,7 +337,7 @@ function OverDots({ balls = [] }) {
   );
 }
 
-function ScoreHeader({ inn, code }) {
+function ScoreHeader({ inn, code, match }) {
   if (!inn) return null;
 
   const crr = economy(inn.score, inn.legalBalls);
@@ -263,14 +347,17 @@ function ScoreHeader({ inn, code }) {
   const rrr = ballsRem > 0 ? (runsNeeded / (ballsRem / 6)).toFixed(2) : "0.00";
 
   return (
-    <div style={{ padding: "18px 16px 10px", background: `linear-gradient(180deg, ${C.bg2}, ${C.bg})` }}>
+    <div style={{ padding: "16px 16px 10px", background: `linear-gradient(180deg, ${C.bg2}, ${C.bg})` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.inkFaint, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>
-            {inn.battingTeam} batting
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <TeamLogo teamKey={match ? match.teamAKey : "KTG"} size="sm" />
+            <div style={{ fontFamily: FONT_BODY, fontSize: 13, color: C.tape, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              {inn.battingTeam} Batting
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <span style={{ fontFamily: FONT_DISPLAY, fontSize: 64, lineHeight: 1, color: C.ink, fontWeight: 600 }}>
+            <span style={{ fontFamily: FONT_DISPLAY, fontSize: 62, lineHeight: 1, color: C.ink, fontWeight: 600 }}>
               {inn.score}<span style={{ color: C.wicket }}>/{inn.wkts}</span>
             </span>
             <span style={{ fontFamily: FONT_MONO, fontSize: 16, color: C.inkDim }}>
@@ -311,10 +398,14 @@ function ScoreHeader({ inn, code }) {
    MAIN APPLICATION CONTAINER
 =========================================================== */
 function App() {
-  const [screen, setScreen] = useState("home"); // home | setup | live | break | done | watch
+  const [screen, setScreen] = useState("home"); // home | setup | live | break | done | watch | scorecard_view
   const [match, setMatch] = useState(() => loadLocal("tapeball:active_match"));
   const [undoStack, setUndoStack] = useState([]);
-  const [completedMatches, setCompletedMatches] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
+  const [viewingMatch, setViewingMatch] = useState(null);
+
+  const [nslTeams, setNslTeams] = useStorageSync("tapeball:nsl_teams", DEFAULT_NSL_TEAMS, "/api/teams");
+  const [schedule, setSchedule] = useStorageSync("tapeball:nsl_schedule", DEFAULT_SCHEDULE, "/api/schedule");
+  const [completedMatches, setCompletedMatches] = useStorageSync("tapeball:completed_matches", [], "/api/completed-matches");
 
   // PERSIST ACTIVE MATCH AUTOMATICALLY ON EVERY BALL SCORE
   useEffect(() => {
@@ -349,49 +440,159 @@ function App() {
     });
   };
 
+  // Add Emergency Player
+  const handleAddPlayer = (teamKey, playerName) => {
+    if (!playerName || !playerName.trim()) return;
+    const name = playerName.trim();
+    const updated = structuredClone(nslTeams);
+    if (updated[teamKey] && !updated[teamKey].players.includes(name)) {
+      updated[teamKey].players.push(name);
+      setNslTeams(updated);
+    }
+  };
+
+  // Reset entire tournament data
+  const handleResetTournament = async () => {
+    if (!window.confirm("Are you sure you want to reset all NSL matches and start fresh?")) return;
+    saveLocal("tapeball:active_match", null);
+    setMatch(null);
+    setCompletedMatches([]);
+    setSchedule(DEFAULT_SCHEDULE);
+    setNslTeams(DEFAULT_NSL_TEAMS);
+    if (navigator.onLine) {
+      await apiFetch("/api/reset", "POST");
+    }
+    alert("NSL Tournament data has been completely reset!");
+  };
+
+  // Record Completed Match
   const handleRecordMatchComplete = (m) => {
     const list = completedMatches || [];
     const inn1 = m.innings[0], inn2 = m.innings[1];
     const rec = {
       id: m.code + "-" + Date.now(),
+      scheduleId: m.scheduleId || null,
+      matchNum: m.matchNum || null,
       teamA: m.teamA, teamB: m.teamB,
+      teamAKey: m.teamAKey, teamBKey: m.teamBKey,
       scoreA: `${inn1.score}/${inn1.wkts} (${oversStr(inn1.legalBalls)})`,
       scoreB: inn2 ? `${inn2.score}/${inn2.wkts} (${oversStr(inn2.legalBalls)})` : "DNB",
+      runsA: inn1.score, wktsA: inn1.wkts, ballsA: inn1.legalBalls,
+      runsB: inn2 ? inn2.score : 0, wktsB: inn2 ? inn2.wkts : 0, ballsB: inn2 ? inn2.legalBalls : 0,
+      oversLimit: m.oversLimit,
       result: m.result,
       winner: m.winner,
       date: new Date().toISOString(),
       innings: m.innings,
     };
+
     saveLocal("tapeball:active_match", null);
-    setCompletedMatches([...list.filter((x) => x.id !== rec.id), rec]);
+    const nextList = [...list.filter((x) => x.id !== rec.id), rec];
+    setCompletedMatches(nextList);
+
+    // Update schedule state & advance playoffs
+    if (m.scheduleId && schedule) {
+      const nextSched = schedule.map((item) => {
+        if (item.id === m.scheduleId) {
+          return { ...item, status: "done", result: m.result, winner: m.winner, matchData: rec };
+        }
+        return item;
+      });
+
+      // CHECK IF ALL 6 GROUP MATCHES ARE DONE TO UNLOCK KNOCKOUT
+      const groupMatches = nextSched.filter((x) => x.round === 1);
+      const allGroupDone = groupMatches.every((x) => x.status === "done");
+      if (allGroupDone) {
+        const standings = calculateStandings(nextList);
+        const rank1 = standings[0] ? standings[0].teamKey : "Rank 1";
+        const rank2 = standings[1] ? standings[1].teamKey : "Rank 2";
+        const rank3 = standings[2] ? standings[2].teamKey : "Rank 3";
+
+        // Unlock Match 7 (Knockout: 2nd vs 3rd)
+        const m7 = nextSched.find((x) => x.id === "m7");
+        if (m7 && m7.status === "locked") {
+          m7.status = "pending";
+          m7.teamA = rank2;
+          m7.teamB = rank3;
+        }
+
+        // If Knockout is done, unlock Grand Final (Rank 1 vs Winner Knockout)
+        if (m7 && m7.status === "done") {
+          const m8 = nextSched.find((x) => x.id === "m8");
+          if (m8 && m8.status === "locked") {
+            m8.status = "pending";
+            m8.teamA = rank1;
+            m8.teamB = m7.winner;
+          }
+        }
+      }
+
+      setSchedule(nextSched);
+    }
   };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.ink, fontFamily: FONT_BODY, paddingBottom: 30 }}>
       {screen === "home" && (
         <Home
+          nslTeams={nslTeams}
+          schedule={schedule}
+          completedMatches={completedMatches}
           activeMatch={match && match.status !== "done" ? match : null}
           onResume={() => setScreen(match.status === "break" ? "break" : "live")}
-          onNew={() => setScreen("setup")}
-          onWatch={() => setScreen("watch")}
-        />
-      )}
-      {screen === "setup" && (
-        <Setup
-          onCancel={() => setScreen("home")}
-          onStart={(m) => {
-            setMatch(m);
+          onStartMatch={(schedMatch) => {
+            const teamAKey = schedMatch.teamA;
+            const teamBKey = schedMatch.teamB;
+            const teamA = nslTeams[teamAKey] ? nslTeams[teamAKey].name : teamAKey;
+            const teamB = nslTeams[teamBKey] ? nslTeams[teamBKey].name : teamBKey;
+            const playersA = nslTeams[teamAKey] ? nslTeams[teamAKey].players : [];
+            const playersB = nslTeams[teamBKey] ? nslTeams[teamBKey].players : [];
+
+            const code = genCode();
+            const inn1 = newInnings(teamA, teamB, playersA, playersB, 8, null);
+            inn1.batsmen[playersA[0]] = emptyBatsman(playersA[0]);
+            inn1.batsmen[playersA[1]] = emptyBatsman(playersA[1]);
+            inn1.bowlers[playersB[0]] = emptyBowler(playersB[0]);
+            inn1.striker = playersA[0];
+            inn1.nonStriker = playersA[1];
+            inn1.currentBowler = playersB[0];
+            inn1.order = [playersA[0], playersA[1]];
+
+            const newM = {
+              code,
+              scheduleId: schedMatch.id,
+              matchNum: schedMatch.matchNum,
+              teamA, teamB, teamAKey, teamBKey,
+              playersA, playersB,
+              oversLimit: 8,
+              innings: [inn1],
+              currentInningsIdx: 0,
+              status: "live",
+              result: "", winner: "",
+              createdAt: Date.now(),
+            };
+            setMatch(newM);
             setUndoStack([]);
             setScreen("live");
           }}
+          onWatch={() => setScreen("watch")}
+          onViewScorecard={(mRec) => {
+            setViewingMatch(mRec);
+            setScreen("scorecard_view");
+          }}
+          onAddPlayer={handleAddPlayer}
+          onResetTournament={handleResetTournament}
         />
       )}
+
       {screen === "live" && match && (
         <Live
           match={match}
+          nslTeams={nslTeams}
           setMatch={(m) => { snapshot(match); setMatch(m); }}
           onUndo={undo}
           canUndo={undoStack.length > 0}
+          onAddEmergencyPlayer={handleAddPlayer}
           onInningsBreak={(m) => { setMatch(m); setScreen("break"); }}
           onMatchDone={(m) => {
             setMatch(m);
@@ -401,175 +602,546 @@ function App() {
           onExit={() => setScreen("home")}
         />
       )}
+
       {screen === "break" && match && (
         <InningsBreak match={match} onContinue={(m) => { setMatch(m); setUndoStack([]); setScreen("live"); }} />
       )}
+
       {screen === "done" && match && (
         <MatchDone
           match={match}
           onHome={() => { setMatch(null); setScreen("home"); }}
-          onNew={() => { setMatch(null); setScreen("setup"); }}
         />
       )}
+
       {screen === "watch" && <Watch onBack={() => setScreen("home")} />}
+
+      {screen === "scorecard_view" && viewingMatch && (
+        <MatchScorecardViewer match={viewingMatch} onBack={() => setScreen("home")} />
+      )}
     </div>
   );
 }
 
 /* ---------------------------------------------------------
-   HOME SCREEN (WITH RESUME UNFINISHED MATCH FEATURE)
+   HOME SCREEN (LEAGUE DASHBOARD WITH 4 TEAMS & STANDINGS)
 --------------------------------------------------------- */
-function Home({ activeMatch, onResume, onNew, onWatch }) {
-  const [history] = useStorageSync("tapeball:completed_matches", "/api/completed-matches");
-  const inn = activeMatch && activeMatch.innings ? activeMatch.innings[activeMatch.currentInningsIdx] : null;
+function Home({ nslTeams, schedule, completedMatches, activeMatch, onResume, onStartMatch, onWatch, onViewScorecard, onAddPlayer, onResetTournament }) {
+  const [tab, setTab] = useState("standings"); // standings | fixtures | leaderboards | teams
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState("ALL");
+  const [teamModalKey, setTeamModalKey] = useState(null);
+  const [newPlayerName, setNewPlayerName] = useState("");
+
+  const standings = calculateStandings(completedMatches);
+  const overallStats = calculateOverallLeaderboard(completedMatches);
 
   return (
-    <div className="tb-fadein" style={{ padding: 20 }}>
-      <div style={{ marginTop: 14, marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontFamily: FONT_BODY, fontSize: 12, letterSpacing: 3, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>Tapeball Ground Scorer</div>
-          <span style={{ fontSize: 11, background: "rgba(111,191,115,0.15)", border: `1px solid ${C.win}`, color: C.win, padding: "3px 8px", borderRadius: 999, fontWeight: 700 }}>
-            ⚡ Auto-Saved
-          </span>
+    <div className="tb-fadein" style={{ padding: "16px 16px 24px" }}>
+      {/* HEADER & BRANDING */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 14, height: 14, borderRadius: "50%", background: C.tape, boxShadow: `0 0 10px ${C.tape}` }} />
+          <div style={{ fontFamily: FONT_BODY, fontSize: 13, letterSpacing: 2, color: C.tape, fontWeight: 800, textTransform: "uppercase" }}>
+            NSL PREMIER LEAGUE
+          </div>
         </div>
-        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 56, fontWeight: 600, lineHeight: 0.92, color: C.ink, marginTop: 8 }}>PRO GROUND<br />SCORECARD</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={onResetTournament} className="tb-btn" style={{ background: "rgba(224,72,59,0.15)", border: `1px solid ${C.wicket}`, color: C.wicket, padding: "4px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            Reset League
+          </button>
+          <button onClick={onWatch} className="tb-btn" style={{ background: C.panel2, border: `1px solid ${C.panelBorder}`, color: C.ink, padding: "4px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+            📡 Live Code
+          </button>
+        </div>
       </div>
 
-      {activeMatch && inn && (
-        <Panel style={{ padding: 16, marginBottom: 20, borderColor: C.tape, background: "rgba(242,169,59,0.08)" }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 52, fontWeight: 600, lineHeight: 0.9, color: C.ink }}>
+          NSL SCORECARD
+        </div>
+        <div style={{ color: C.inkDim, fontSize: 13, marginTop: 4 }}>
+          4 Teams · 6 Matches Round 1 · Top ➔ Final · 2nd vs 3rd Knockout
+        </div>
+      </div>
+
+      {/* 4 TEAMS QUICK ROW */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
+        {Object.values(nslTeams).map((t) => (
+          <Panel key={t.id} style={{ padding: "10px 4px", textAlign: "center", cursor: "pointer", borderColor: C.panelBorder }} onClick={() => setTeamModalKey(t.id)}>
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <TeamLogo teamKey={t.id} size="md" />
+            </div>
+            <div style={{ fontFamily: FONT_DISPLAY, fontSize: 15, color: C.ink, marginTop: 6, fontWeight: 600 }}>
+              {t.short}
+            </div>
+            <div style={{ fontSize: 10, color: C.inkFaint }}>
+              {t.players.length} players
+            </div>
+          </Panel>
+        ))}
+      </div>
+
+      {/* UNFINISHED MATCH PROMPT */}
+      {activeMatch && (
+        <Panel style={{ padding: 14, marginBottom: 16, borderColor: C.tape, background: "rgba(242,169,59,0.08)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Label>⚠️ Unfinished Match Found</Label>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.tape, fontWeight: 700 }}>Code: {activeMatch.code}</span>
+            <span style={{ fontSize: 11, color: C.tape, fontWeight: 800 }}>⚠️ LIVE MATCH IN PROGRESS</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.inkDim }}>Code: {activeMatch.code}</span>
           </div>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 28, color: C.ink, marginTop: 4 }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.ink, marginTop: 4 }}>
             {activeMatch.teamA} vs {activeMatch.teamB}
           </div>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 14, color: C.inkDim, marginTop: 2 }}>
-            Current Score: {inn.battingTeam} {inn.score}/{inn.wkts} ({oversStr(inn.legalBalls)} ov)
-          </div>
-          <BigButton onClick={onResume} bg={C.win} color="#0A1F0B" style={{ marginTop: 12, width: "100%", padding: 14, fontFamily: FONT_DISPLAY, fontSize: 20 }}>
+          <BigButton onClick={onResume} bg={C.win} color="#0A1F0B" style={{ marginTop: 10, width: "100%", padding: 12, fontFamily: FONT_DISPLAY, fontSize: 18 }}>
             ▶ Resume Match Right Now
           </BigButton>
         </Panel>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <BigButton onClick={onNew} bg={activeMatch ? C.panel2 : C.tape} color={activeMatch ? C.ink : "#1A1305"} style={{ padding: "18px", fontSize: 22, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          + Start New Match
-        </BigButton>
-        <BigButton onClick={onWatch} style={{ padding: "16px 20px", fontSize: 17, fontFamily: FONT_DISPLAY, letterSpacing: 0.5 }}>
-          📡 Watch Live Match (Code Sync)
-        </BigButton>
+      {/* NAVIGATION TABS */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+        <Chip active={tab === "standings"} onClick={() => setTab("standings")}>🏆 Points & NRR</Chip>
+        <Chip active={tab === "fixtures"} onClick={() => setTab("fixtures")}>📅 Schedule & Play</Chip>
+        <Chip active={tab === "leaderboards"} onClick={() => setTab("leaderboards")}>📊 Leaderboards</Chip>
+        <Chip active={tab === "teams"} onClick={() => setTab("teams")}>🏏 Team Squads</Chip>
       </div>
 
-      {history && history.length > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <Label>Recent Match Results</Label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-            {history.slice().reverse().slice(0, 5).map((m) => (
-              <Panel key={m.id} style={{ padding: 12 }}>
-                <div style={{ fontFamily: FONT_BODY, fontSize: 14, fontWeight: 700 }}>{m.teamA} vs {m.teamB}</div>
-                <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.inkDim, marginTop: 2 }}>{m.scoreA} · {m.scoreB}</div>
-                <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: C.tape, marginTop: 4 }}>{m.result}</div>
+      {/* 1. STANDINGS & NRR TAB */}
+      {tab === "standings" && (
+        <div className="tb-fadein">
+          <Panel style={{ padding: 14, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <Label>Points Table (Win=2, Tie=1, Loss=0)</Label>
+              <span style={{ fontSize: 10, color: C.tape, fontWeight: 700 }}>8 Overs Match</span>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.inkFaint, textAlign: "left", fontSize: 10, borderBottom: `1px solid ${C.panelBorder}` }}>
+                  <th style={{ paddingBottom: 6 }}>Team</th>
+                  <th>P</th><th>W</th><th>L</th><th>T</th><th>Pts</th><th>NRR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standings.map((st, idx) => {
+                  const teamObj = nslTeams[st.teamKey];
+                  const rankBadge = idx === 0 ? "badge-finalist" : (idx === 1 || idx === 2) ? "badge-knockout" : "badge-elim";
+                  const rankLabel = idx === 0 ? "DIRECT FINAL" : (idx === 1 || idx === 2) ? "KNOCKOUT" : "OUT";
+                  return (
+                    <tr key={st.teamKey} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
+                      <td style={{ padding: "10px 0" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <TeamLogo teamKey={st.teamKey} size="sm" />
+                          <div>
+                            <div style={{ color: C.ink, fontWeight: 700 }}>{teamObj ? teamObj.short : st.teamKey}</div>
+                            <span className={rankBadge} style={{ fontSize: 9 }}>{rankLabel}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{st.played}</td>
+                      <td>{st.won}</td>
+                      <td>{st.lost}</td>
+                      <td>{st.tied}</td>
+                      <td style={{ color: C.tape, fontWeight: 800, fontSize: 14 }}>{st.pts}</td>
+                      <td style={{ color: st.nrr >= 0 ? C.win : C.wicket }}>
+                        {st.nrr >= 0 ? `+${st.nrr.toFixed(3)}` : st.nrr.toFixed(3)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Panel>
+
+          <Panel style={{ padding: 14 }}>
+            <Label>NSL Tournament Qualification Format</Label>
+            <div style={{ fontSize: 13, color: C.inkDim, marginTop: 8, lineHeight: 1.6 }}>
+              • <strong>1st Place</strong>: Advances <strong>directly to the Grand Final</strong>! 🏆<br />
+              • <strong>2nd vs 3rd Place</strong>: Play the <strong>Knockout Qualifier</strong> match! ⚔️<br />
+              • <strong>4th Place (Last)</strong>: Eliminated from the tournament. ❌
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {/* 2. FIXTURES & SCHEDULE TAB */}
+      {tab === "fixtures" && (
+        <div className="tb-fadein" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {schedule.map((item) => {
+            const teamAObj = nslTeams[item.teamA];
+            const teamBObj = nslTeams[item.teamB];
+            const isCompleted = item.status === "done";
+            const isLocked = item.status === "locked";
+
+            return (
+              <Panel key={item.id} style={{ padding: 14, borderColor: item.isPlayoff ? C.tape : C.panelBorder, background: item.isPlayoff ? "rgba(242,169,59,0.06)" : C.panel }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: item.isPlayoff ? C.tape : C.inkFaint, textTransform: "uppercase" }}>
+                    {item.stageName}
+                  </span>
+                  {isCompleted ? (
+                    <span style={{ color: C.win, fontSize: 11, fontWeight: 800 }}>✓ COMPLETED</span>
+                  ) : isLocked ? (
+                    <span style={{ color: C.inkFaint, fontSize: 11, fontWeight: 700 }}>🔒 WAITING GROUP STANDINGS</span>
+                  ) : (
+                    <span style={{ color: C.tape, fontSize: 11, fontWeight: 800 }}>UPCOMING</span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "10px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <TeamLogo teamKey={item.teamA} size="md" />
+                    <div>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.ink }}>
+                        {teamAObj ? teamAObj.short : item.teamA}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.inkDim }}>
+                        {teamAObj ? teamAObj.name : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontFamily: FONT_DISPLAY, fontSize: 18, color: C.inkFaint }}>VS</div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexDirection: "row-reverse", textAlign: "right" }}>
+                    <TeamLogo teamKey={item.teamB} size="md" />
+                    <div>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 20, color: C.ink }}>
+                        {teamBObj ? teamBObj.short : item.teamB}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.inkDim }}>
+                        {teamBObj ? teamBObj.name : ""}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {isCompleted ? (
+                  <div style={{ borderTop: `1px solid ${C.panelBorder}`, paddingTop: 8, marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ color: C.tape, fontSize: 13, fontWeight: 700 }}>
+                      {item.result}
+                    </div>
+                    {item.matchData && (
+                      <button onClick={() => onViewScorecard(item.matchData)} className="tb-btn" style={{ background: C.panel2, border: `1px solid ${C.panelBorder}`, color: C.ink, padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        View Card
+                      </button>
+                    )}
+                  </div>
+                ) : !isLocked && (
+                  <BigButton
+                    onClick={() => onStartMatch(item)}
+                    bg={item.isPlayoff ? C.win : C.tape}
+                    color={item.isPlayoff ? "#0A1F0B" : "#1A1305"}
+                    style={{ marginTop: 10, width: "100%", padding: 12, fontFamily: FONT_DISPLAY, fontSize: 18 }}
+                  >
+                    Start Match {item.matchNum} ▶
+                  </BigButton>
+                )}
               </Panel>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 3. MULTI-TIER LEADERBOARDS TAB */}
+      {tab === "leaderboards" && (
+        <div className="tb-fadein" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Team Filter selector */}
+          <div style={{ display: "flex", gap: 6, overflowX: "auto" }}>
+            <Chip active={selectedTeamFilter === "ALL"} onClick={() => setSelectedTeamFilter("ALL")}>All Teams</Chip>
+            {Object.values(nslTeams).map((t) => (
+              <Chip key={t.id} active={selectedTeamFilter === t.id} onClick={() => setSelectedTeamFilter(t.id)}>{t.short}</Chip>
             ))}
           </div>
+
+          {/* ORANGE CAP (RUNS) */}
+          <Panel style={{ padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>🟠</span>
+              <Label>Top Run Scorers (Orange Cap)</Label>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.inkFaint, textAlign: "left", fontSize: 10, borderBottom: `1px solid ${C.panelBorder}` }}>
+                  <th style={{ paddingBottom: 6 }}>Player</th><th>Team</th><th>Runs</th><th>Balls</th><th>SR</th><th>6s</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overallStats.batsmen
+                  .filter((b) => selectedTeamFilter === "ALL" || b.teamKey === selectedTeamFilter)
+                  .slice(0, 10).map((b, i) => (
+                    <tr key={b.name} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
+                      <td style={{ padding: "7px 0", color: i === 0 ? C.tape : C.ink, fontWeight: i === 0 ? 700 : 400 }}>
+                        {b.name}
+                      </td>
+                      <td style={{ color: C.inkDim }}>{b.teamShort}</td>
+                      <td style={{ color: C.tape, fontWeight: 700 }}>{b.runs}</td>
+                      <td>{b.balls}</td>
+                      <td>{strikeRate(b.runs, b.balls)}</td>
+                      <td style={{ color: C.tape2 }}>{b.sixes}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+            {overallStats.batsmen.length === 0 && (
+              <div style={{ color: C.inkDim, fontSize: 12, padding: "10px 0" }}>No completed match data recorded yet.</div>
+            )}
+          </Panel>
+
+          {/* PURPLE CAP (WICKETS) */}
+          <Panel style={{ padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>🟣</span>
+              <Label>Top Wicket Takers (Purple Cap)</Label>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.inkFaint, textAlign: "left", fontSize: 10, borderBottom: `1px solid ${C.panelBorder}` }}>
+                  <th style={{ paddingBottom: 6 }}>Bowler</th><th>Team</th><th>Wkts</th><th>Overs</th><th>Runs</th><th>Econ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overallStats.bowlers
+                  .filter((bw) => selectedTeamFilter === "ALL" || bw.teamKey === selectedTeamFilter)
+                  .slice(0, 10).map((bw, i) => (
+                    <tr key={bw.name} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
+                      <td style={{ padding: "7px 0", color: i === 0 ? C.tape : C.ink, fontWeight: i === 0 ? 700 : 400 }}>
+                        {bw.name}
+                      </td>
+                      <td style={{ color: C.inkDim }}>{bw.teamShort}</td>
+                      <td style={{ color: C.win, fontWeight: 700 }}>{bw.wkts}</td>
+                      <td>{Math.floor(bw.balls / 6)}.{bw.balls % 6}</td>
+                      <td>{bw.runs}</td>
+                      <td>{economy(bw.runs, bw.balls)}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+            {overallStats.bowlers.length === 0 && (
+              <div style={{ color: C.inkDim, fontSize: 12, padding: "10px 0" }}>No completed match data recorded yet.</div>
+            )}
+          </Panel>
+
+          {/* MAXIMUM SIXES */}
+          <Panel style={{ padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 20 }}>💥</span>
+              <Label>Maximum Sixes Award</Label>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT_MONO, fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.inkFaint, textAlign: "left", fontSize: 10, borderBottom: `1px solid ${C.panelBorder}` }}>
+                  <th style={{ paddingBottom: 6 }}>Player</th><th>Team</th><th>Sixes</th><th>Fours</th><th>Runs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overallStats.batsmen
+                  .filter((b) => (selectedTeamFilter === "ALL" || b.teamKey === selectedTeamFilter) && b.sixes > 0)
+                  .sort((a, b) => b.sixes - a.sixes || b.runs - a.runs)
+                  .slice(0, 8).map((b, i) => (
+                    <tr key={b.name} style={{ borderTop: `1px solid ${C.panelBorder}` }}>
+                      <td style={{ padding: "7px 0", color: C.ink }}>{b.name}</td>
+                      <td style={{ color: C.inkDim }}>{b.teamShort}</td>
+                      <td style={{ color: C.tape2, fontWeight: 700, fontSize: 13 }}>{b.sixes}</td>
+                      <td>{b.fours}</td>
+                      <td>{b.runs}</td>
+                    </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
         </div>
+      )}
+
+      {/* 4. TEAM SQUADS & EMERGENCY ADD PLAYER */}
+      {tab === "teams" && (
+        <div className="tb-fadein" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {Object.values(nslTeams).map((t) => (
+            <Panel key={t.id} style={{ padding: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <TeamLogo teamKey={t.id} size="md" />
+                  <div>
+                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: 22, color: C.ink }}>{t.name}</div>
+                    <div style={{ fontSize: 11, color: C.tape, fontWeight: 700 }}>Captain: {t.captain}</div>
+                  </div>
+                </div>
+                <button onClick={() => setTeamModalKey(t.id)} className="tb-btn" style={{ background: C.panel2, border: `1px solid ${C.tape}`, color: C.tape, padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  + Add Player
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {t.players.map((p, idx) => (
+                  <div key={idx} style={{ background: C.bg2, border: `1px solid ${C.panelBorder}`, padding: "4px 8px", borderRadius: 8, fontSize: 12, color: p.includes("(C)") ? C.tape : C.ink }}>
+                    {p}
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          ))}
+        </div>
+      )}
+
+      {/* EMERGENCY ADD PLAYER MODAL */}
+      {teamModalKey && (
+        <ModalShell title={`Add Emergency Player to ${nslTeams[teamModalKey]?.name}`} onClose={() => setTeamModalKey(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <Label>Player Name</Label>
+            <TextInput
+              value={newPlayerName}
+              onChange={(e) => setNewPlayerName(e.target.value)}
+              placeholder="e.g. Tariq Khan"
+            />
+            <BigButton
+              onClick={() => {
+                if (newPlayerName.trim()) {
+                  onAddPlayer(teamModalKey, newPlayerName.trim());
+                  setNewPlayerName("");
+                  setTeamModalKey(null);
+                }
+              }}
+              disabled={!newPlayerName.trim()}
+              bg={C.win}
+              color="#0A1F0B"
+              style={{ padding: 14, fontFamily: FONT_DISPLAY, fontSize: 18 }}
+            >
+              Confirm Emergency Player Addition ▶
+            </BigButton>
+          </div>
+        </ModalShell>
       )}
     </div>
   );
 }
 
 /* ---------------------------------------------------------
-   SIMPLE MATCH SETUP WIZARD
+   STANDINGS & NRR CALCULATION ENGINE
 --------------------------------------------------------- */
-function Setup({ onCancel, onStart }) {
-  const [teamA, setTeamA] = useState("Team A");
-  const [teamB, setTeamB] = useState("Team B");
-  const [overs, setOvers] = useState("8");
-  const [striker, setStriker] = useState("Striker 1");
-  const [nonStriker, setNonStriker] = useState("Striker 2");
-  const [bowler, setBowler] = useState("Bowler 1");
+function calculateStandings(completedMatches = []) {
+  const teams = ["KTG", "ASK", "NKG", "ALW"];
+  const stats = {};
 
-  function start() {
-    const code = genCode();
-    const inn1 = newInnings(teamA, teamB, [striker, nonStriker], [bowler], Number(overs), null);
-    inn1.batsmen[striker] = emptyBatsman(striker);
-    inn1.batsmen[nonStriker] = emptyBatsman(nonStriker);
-    inn1.bowlers[bowler] = emptyBowler(bowler);
-    inn1.striker = striker;
-    inn1.nonStriker = nonStriker;
-    inn1.currentBowler = bowler;
-    inn1.order = [striker, nonStriker];
-
-    const m = {
-      code, teamA, teamB,
-      oversLimit: Number(overs),
-      innings: [inn1],
-      currentInningsIdx: 0,
-      status: "live",
-      result: "", winner: "",
-      createdAt: Date.now(),
+  teams.forEach((t) => {
+    stats[t] = {
+      teamKey: t, played: 0, won: 0, lost: 0, tied: 0, pts: 0,
+      runsScored: 0, ballsFaced: 0, runsConceded: 0, ballsBowled: 0, nrr: 0,
     };
-    onStart(m);
-  }
+  });
 
-  return (
-    <div className="tb-fadein">
-      <BackBar title="Match Setup" onBack={onCancel} />
-      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div>
-            <Label>Team A Name</Label>
-            <TextInput value={teamA} onChange={(e) => setTeamA(e.target.value)} style={{ marginTop: 6 }} />
-          </div>
-          <div>
-            <Label>Team B Name</Label>
-            <TextInput value={teamB} onChange={(e) => setTeamB(e.target.value)} style={{ marginTop: 6 }} />
-          </div>
-        </div>
+  (completedMatches || []).forEach((m) => {
+    // Only count Round 1 matches towards group standings
+    if (m.isPlayoff) return;
+    if (!m.innings || m.innings.length < 1) return;
 
-        <div>
-          <Label>Overs Limit</Label>
-          <TextInput type="number" value={overs} onChange={(e) => setOvers(e.target.value)} style={{ marginTop: 6 }} />
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            {[4, 6, 8, 10, 12, 15, 20].map((n) => (
-              <Chip key={n} active={overs === String(n)} onClick={() => setOvers(String(n))}>{n} ov</Chip>
-            ))}
-          </div>
-        </div>
+    const inn1 = m.innings[0], inn2 = m.innings[1];
+    const tA = m.teamAKey || "KTG";
+    const tB = m.teamBKey || "ASK";
 
-        <Panel style={{ padding: 14 }}>
-          <Label>Opening Batsmen ({teamA})</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
-            <div>
-              <Label>Striker</Label>
-              <TextInput value={striker} onChange={(e) => setStriker(e.target.value)} style={{ marginTop: 4 }} />
-            </div>
-            <div>
-              <Label>Non-Striker</Label>
-              <TextInput value={nonStriker} onChange={(e) => setNonStriker(e.target.value)} style={{ marginTop: 4 }} />
-            </div>
-          </div>
-        </Panel>
+    if (!stats[tA] || !stats[tB]) return;
 
-        <Panel style={{ padding: 14 }}>
-          <Label>Opening Bowler ({teamB})</Label>
-          <TextInput value={bowler} onChange={(e) => setBowler(e.target.value)} style={{ marginTop: 6 }} />
-        </Panel>
+    stats[tA].played += 1;
+    stats[tB].played += 1;
 
-        <BigButton onClick={start} disabled={!teamA || !teamB || !striker || !nonStriker || !bowler} bg={C.win} color="#0A1F0B" style={{ padding: 16, width: "100%", fontFamily: FONT_DISPLAY, fontSize: 22 }}>
-          Start Match ▶
-        </BigButton>
-      </div>
-    </div>
-  );
+    if (m.winner === m.teamA) {
+      stats[tA].won += 1; stats[tA].pts += 2;
+      stats[tB].lost += 1;
+    } else if (m.winner === m.teamB) {
+      stats[tB].won += 1; stats[tB].pts += 2;
+      stats[tA].lost += 1;
+    } else {
+      stats[tA].tied += 1; stats[tA].pts += 1;
+      stats[tB].tied += 1; stats[tB].pts += 1;
+    }
+
+    // 1st Innings stats (Batting team = inn1.battingTeam)
+    const t1Key = inn1.battingTeam === m.teamA ? tA : tB;
+    const t2Key = t1Key === tA ? tB : tA;
+
+    stats[t1Key].runsScored += inn1.score;
+    // All out rule: if all wickets lost, count full 8 overs (48 balls)
+    const allOut1 = inn1.wkts >= (inn1.battingPlayers?.length - 1 || 10);
+    stats[t1Key].ballsFaced += allOut1 ? inn1.oversLimit * 6 : inn1.legalBalls;
+
+    stats[t2Key].runsConceded += inn1.score;
+    stats[t2Key].ballsBowled += allOut1 ? inn1.oversLimit * 6 : inn1.legalBalls;
+
+    // 2nd Innings stats
+    if (inn2) {
+      stats[t2Key].runsScored += inn2.score;
+      const allOut2 = inn2.wkts >= (inn2.battingPlayers?.length - 1 || 10);
+      stats[t2Key].ballsFaced += allOut2 ? inn2.oversLimit * 6 : inn2.legalBalls;
+
+      stats[t1Key].runsConceded += inn2.score;
+      stats[t1Key].ballsBowled += allOut2 ? inn2.oversLimit * 6 : inn2.legalBalls;
+    }
+  });
+
+  Object.values(stats).forEach((s) => {
+    const batOvers = s.ballsFaced / 6;
+    const bowlOvers = s.ballsBowled / 6;
+    const batRate = batOvers > 0 ? s.runsScored / batOvers : 0;
+    const bowlRate = bowlOvers > 0 ? s.runsConceded / bowlOvers : 0;
+    s.nrr = batRate - bowlRate;
+  });
+
+  return Object.values(stats).sort((a, b) => b.pts - a.pts || b.nrr - a.nrr || b.won - a.won);
 }
 
 /* ---------------------------------------------------------
-   LIVE SCORER ENGINE
+   OVERALL LEADERBOARDS CALCULATION
 --------------------------------------------------------- */
-function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, onExit }) {
+function calculateOverallLeaderboard(completedMatches = []) {
+  const batsmen = {};
+  const bowlers = {};
+
+  (completedMatches || []).forEach((m) => {
+    if (!m.innings) return;
+
+    m.innings.forEach((inn) => {
+      if (!inn || !inn.batsmen) return;
+      const teamKey = inn.battingTeam === m.teamA ? m.teamAKey : m.teamBKey;
+      const teamObj = DEFAULT_NSL_TEAMS[teamKey];
+      const teamShort = teamObj ? teamObj.short : teamKey;
+
+      Object.values(inn.batsmen).forEach((b) => {
+        if (!b || (b.balls === 0 && b.runs === 0)) return;
+        if (!batsmen[b.name]) {
+          batsmen[b.name] = { name: b.name, teamKey, teamShort, runs: 0, balls: 0, fours: 0, sixes: 0, innings: 0 };
+        }
+        batsmen[b.name].runs += b.runs;
+        batsmen[b.name].balls += b.balls;
+        batsmen[b.name].fours += b.fours;
+        batsmen[b.name].sixes += b.sixes;
+        batsmen[b.name].innings += 1;
+      });
+
+      if (!inn.bowlers) return;
+      const bowlTeamKey = inn.bowlingTeam === m.teamA ? m.teamAKey : m.teamBKey;
+      const bowlTeamObj = DEFAULT_NSL_TEAMS[bowlTeamKey];
+      const bowlTeamShort = bowlTeamObj ? bowlTeamObj.short : bowlTeamKey;
+
+      Object.values(inn.bowlers).forEach((bw) => {
+        if (!bw || bw.balls === 0) return;
+        if (!bowlers[bw.name]) {
+          bowlers[bw.name] = { name: bw.name, teamKey: bowlTeamKey, teamShort: bowlTeamShort, wkts: 0, balls: 0, runs: 0, matches: 0 };
+        }
+        bowlers[bw.name].wkts += bw.wkts;
+        bowlers[bw.name].balls += bw.balls;
+        bowlers[bw.name].runs += bw.runs;
+        bowlers[bw.name].matches += 1;
+      });
+    });
+  });
+
+  const sortedBatsmen = Object.values(batsmen).sort((a, b) => b.runs - a.runs || b.sixes - a.sixes);
+  const sortedBowlers = Object.values(bowlers).sort((a, b) => b.wkts - a.wkts || a.runs - b.runs);
+
+  return { batsmen: sortedBatsmen, bowlers: sortedBowlers };
+}
+
+/* ---------------------------------------------------------
+   LIVE SCORER ENGINE (WITH EMERGENCY PLAYER & FAST WICKETS)
+--------------------------------------------------------- */
+function Live({ match, nslTeams, setMatch, onUndo, canUndo, onAddEmergencyPlayer, onInningsBreak, onMatchDone, onExit }) {
   const inn = match.innings[match.currentInningsIdx];
   const [wicketOpen, setWicketOpen] = useState(false);
   const [noBallOpen, setNoBallOpen] = useState(false);
@@ -832,7 +1404,7 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
   const bowl = inn.currentBowler ? inn.bowlers[inn.currentBowler] : null;
 
   const retiredBatsmen = (inn.order || []).filter((n) => inn.batsmen[n] && inn.batsmen[n].how === "retired");
-  const unbattedPlayers = inn.battingPlayers.filter((p) => !inn.order.includes(p));
+  const unbattedPlayers = (inn.battingPlayers || []).filter((p) => !inn.order.includes(p));
 
   return (
     <div className="tb-fadein">
@@ -843,7 +1415,7 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
           </button>
         }
       />
-      <ScoreHeader inn={inn} code={match.code} />
+      <ScoreHeader inn={inn} code={match.code} match={match} />
 
       <div style={{ display: "flex", gap: 6, padding: "0 16px 10px" }}>
         <Chip active={tab === "score"} onClick={() => setTab("score")}>Scoreboard</Chip>
@@ -955,14 +1527,24 @@ function Live({ match, setMatch, onUndo, canUndo, onInningsBreak, onMatchDone, o
           retiredBatsmen={retiredBatsmen}
           unbattedPlayers={unbattedPlayers}
           onConfirm={(name) => applyWicket({ ...newBatModal, newBatsman: name })}
+          onAddEmergencyPlayer={(pName) => {
+            const teamKey = inn.battingTeam === match.teamA ? match.teamAKey : match.teamBKey;
+            onAddEmergencyPlayer(teamKey, pName);
+            applyWicket({ ...newBatModal, newBatsman: pName });
+          }}
           onClose={() => setNewBatModal(null)}
         />
       )}
 
       {bowlerModal && (
         <BowlerModal
-          existingBowlers={inn.bowlingPlayers.filter(p => p !== inn.prevBowler)}
+          existingBowlers={(inn.bowlingPlayers || []).filter(p => p !== inn.prevBowler)}
           onPick={pickBowler}
+          onAddEmergencyPlayer={(pName) => {
+            const teamKey = inn.bowlingTeam === match.teamA ? match.teamAKey : match.teamBKey;
+            onAddEmergencyPlayer(teamKey, pName);
+            pickBowler(pName);
+          }}
         />
       )}
     </div>
@@ -1071,7 +1653,7 @@ function Scorecard({ inn }) {
   );
 }
 
-/* WICKET MODAL WITH RETIRED BATSMAN OPTION */
+/* WICKET MODAL WITH FAST 1-TAP DISMISSALS */
 function WicketModal({ isFreeHit, striker, nonStriker, onClose, onConfirm }) {
   const [type, setType] = useState(isFreeHit ? "run out" : "bowled");
   const [whoOut, setWhoOut] = useState("striker");
@@ -1128,13 +1710,13 @@ function WicketModal({ isFreeHit, striker, nonStriker, onClose, onConfirm }) {
   );
 }
 
-/* DYNAMIC NEW BATSMAN MODAL WITH RETIRED BATSMEN RECALL */
-function NewBatsmanModal({ retiredBatsmen = [], unbattedPlayers = [], onConfirm, onClose }) {
+/* NEW BATSMAN MODAL WITH RETIRED RECALL & EMERGENCY PLAYER ADD */
+function NewBatsmanModal({ retiredBatsmen = [], unbattedPlayers = [], onConfirm, onAddEmergencyPlayer, onClose }) {
   const [customName, setCustomName] = useState("");
 
   function handleAddCustom() {
     if (customName.trim()) {
-      onConfirm(customName.trim());
+      onAddEmergencyPlayer(customName.trim());
     }
   }
 
@@ -1156,7 +1738,7 @@ function NewBatsmanModal({ retiredBatsmen = [], unbattedPlayers = [], onConfirm,
 
         {unbattedPlayers.length > 0 && (
           <div>
-            <Label>Select Unbatted Player</Label>
+            <Label>Select Team Batsman</Label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {unbattedPlayers.map((p) => (
                 <BigButton key={p} onClick={() => onConfirm(p)} bg={C.panel2} style={{ padding: 12, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
@@ -1166,9 +1748,9 @@ function NewBatsmanModal({ retiredBatsmen = [], unbattedPlayers = [], onConfirm,
         )}
 
         <div>
-          <Label>Type New Batsman Name (One-by-One)</Label>
+          <Label>+ Add Emergency Player</Label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="e.g. Ali" />
+            <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Type new batsman name..." />
             <BigButton onClick={handleAddCustom} disabled={!customName.trim()} bg={C.tape} color="#1A1305" style={{ padding: "0 16px", whiteSpace: "nowrap" }}>
               + Add
             </BigButton>
@@ -1179,13 +1761,13 @@ function NewBatsmanModal({ retiredBatsmen = [], unbattedPlayers = [], onConfirm,
   );
 }
 
-/* DYNAMIC NEW BOWLER MODAL (ADD ONE-BY-ONE) */
-function BowlerModal({ existingBowlers = [], onPick }) {
+/* NEW BOWLER MODAL WITH EMERGENCY PLAYER ADD */
+function BowlerModal({ existingBowlers = [], onPick, onAddEmergencyPlayer }) {
   const [customName, setCustomName] = useState("");
 
   function handleAddCustom() {
     if (customName.trim()) {
-      onPick(customName.trim());
+      onAddEmergencyPlayer(customName.trim());
     }
   }
 
@@ -1194,7 +1776,7 @@ function BowlerModal({ existingBowlers = [], onPick }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {existingBowlers.length > 0 && (
           <div>
-            <Label>Select Existing Bowler</Label>
+            <Label>Select Team Bowler</Label>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {existingBowlers.map((p) => (
                 <BigButton key={p} onClick={() => onPick(p)} bg={C.panel2} style={{ padding: 12, textAlign: "left", fontSize: 15 }}>{p}</BigButton>
@@ -1204,9 +1786,9 @@ function BowlerModal({ existingBowlers = [], onPick }) {
         )}
 
         <div>
-          <Label>Type New Bowler Name (One-by-One)</Label>
+          <Label>+ Add Emergency Bowler</Label>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="e.g. Arbaz" />
+            <TextInput value={customName} onChange={(e) => setCustomName(e.target.value)} placeholder="Type new bowler name..." />
             <BigButton onClick={handleAddCustom} disabled={!customName.trim()} bg={C.tape} color="#1A1305" style={{ padding: "0 16px", whiteSpace: "nowrap" }}>
               + Add
             </BigButton>
@@ -1219,7 +1801,7 @@ function BowlerModal({ existingBowlers = [], onPick }) {
 
 function ModalShell({ title, children, onClose }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(10,19,15,0.85)", display: "flex", alignItems: "flex-end", zIndex: 50 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(10,17,13,0.88)", display: "flex", alignItems: "flex-end", zIndex: 50 }}>
       <div className="tb-fadein" style={{ width: "100%", background: C.bg, borderTop: `1px solid ${C.panelBorder}`, borderRadius: "18px 18px 0 0", padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.ink }}>{title}</div>
@@ -1236,17 +1818,20 @@ function ModalShell({ title, children, onClose }) {
 --------------------------------------------------------- */
 function InningsBreak({ match, onContinue }) {
   const inn1 = match.innings[0];
-  const [striker, setStriker] = useState("");
-  const [nonStriker, setNonStriker] = useState("");
-  const [bowler, setBowler] = useState("");
-
   const battingTeam = inn1.bowlingTeam;
   const bowlingTeam = inn1.battingTeam;
+  const battingPlayers = battingTeam === match.teamA ? match.playersA : match.playersB;
+  const bowlingPlayers = bowlingTeam === match.teamA ? match.playersA : match.playersB;
+
+  const [striker, setStriker] = useState(battingPlayers[0] || "");
+  const [nonStriker, setNonStriker] = useState(battingPlayers[1] || "");
+  const [bowler, setBowler] = useState(bowlingPlayers[0] || "");
+
   const target = inn1.score + 1;
 
   function start() {
     const m2 = structuredClone(match);
-    const inn2 = newInnings(battingTeam, bowlingTeam, [striker, nonStriker], [bowler], match.oversLimit, target);
+    const inn2 = newInnings(battingTeam, bowlingTeam, battingPlayers, bowlingPlayers, match.oversLimit, target);
     inn2.batsmen[striker] = emptyBatsman(striker);
     inn2.batsmen[nonStriker] = emptyBatsman(nonStriker);
     inn2.bowlers[bowler] = emptyBowler(bowler);
@@ -1276,18 +1861,18 @@ function InningsBreak({ match, onContinue }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
             <div>
               <Label>Striker</Label>
-              <TextInput value={striker} onChange={(e) => setStriker(e.target.value)} placeholder="e.g. Player 1" style={{ marginTop: 4 }} />
+              <TextInput value={striker} onChange={(e) => setStriker(e.target.value)} style={{ marginTop: 4 }} />
             </div>
             <div>
               <Label>Non-Striker</Label>
-              <TextInput value={nonStriker} onChange={(e) => setNonStriker(e.target.value)} placeholder="e.g. Player 2" style={{ marginTop: 4 }} />
+              <TextInput value={nonStriker} onChange={(e) => setNonStriker(e.target.value)} style={{ marginTop: 4 }} />
             </div>
           </div>
         </Panel>
 
         <Panel style={{ padding: 14, marginBottom: 20 }}>
           <Label>Opening Bowler ({bowlingTeam})</Label>
-          <TextInput value={bowler} onChange={(e) => setBowler(e.target.value)} placeholder="e.g. Bowler 1" style={{ marginTop: 6 }} />
+          <TextInput value={bowler} onChange={(e) => setBowler(e.target.value)} style={{ marginTop: 6 }} />
         </Panel>
 
         <BigButton onClick={start} disabled={!striker || !nonStriker || striker === nonStriker || !bowler} bg={C.win} color="#0A1F0B" style={{ width: "100%", padding: 16, fontFamily: FONT_DISPLAY, fontSize: 20 }}>
@@ -1301,7 +1886,7 @@ function InningsBreak({ match, onContinue }) {
 /* ---------------------------------------------------------
    MATCH DONE SCREEN
 --------------------------------------------------------- */
-function MatchDone({ match, onHome, onNew }) {
+function MatchDone({ match, onHome }) {
   const inn1 = match.innings[0], inn2 = match.innings[1];
   return (
     <div className="tb-fadein">
@@ -1327,10 +1912,44 @@ function MatchDone({ match, onHome, onNew }) {
         </div>
         <Scorecard inn={inn1} />
         {inn2 && <Scorecard inn={inn2} />}
-        <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-          <BigButton onClick={onHome} style={{ flex: 1, padding: 14 }}>Home</BigButton>
-          <BigButton onClick={onNew} bg={C.tape} color="#1A1305" style={{ flex: 1, padding: 14, fontWeight: 800 }}>New Match</BigButton>
+        <div style={{ marginTop: 12 }}>
+          <BigButton onClick={onHome} bg={C.tape} color="#1A1305" style={{ width: "100%", padding: 16, fontFamily: FONT_DISPLAY, fontSize: 20 }}>
+            Back to NSL Dashboard
+          </BigButton>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
+   MATCH SCORECARD VIEWER (INDIVIDUAL MATCH STATS)
+--------------------------------------------------------- */
+function MatchScorecardViewer({ match, onBack }) {
+  const inn1 = match.innings ? match.innings[0] : null;
+  const inn2 = match.innings ? match.innings[1] : null;
+
+  return (
+    <div className="tb-fadein">
+      <BackBar title={`${match.teamA} vs ${match.teamB}`} onBack={onBack} />
+      <div style={{ padding: 16 }}>
+        <Panel style={{ padding: 16, textAlign: "center", marginBottom: 14, borderColor: C.tape }}>
+          <div style={{ fontSize: 11, color: C.inkFaint, textTransform: "uppercase", letterSpacing: 1 }}>Match Result</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 26, color: C.tape, marginTop: 4 }}>{match.result}</div>
+          <div style={{ display: "flex", justifyContent: "space-around", marginTop: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: C.inkDim }}>{match.teamA}</div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 16, fontWeight: 700 }}>{match.scoreA}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: C.inkDim }}>{match.teamB}</div>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 16, fontWeight: 700 }}>{match.scoreB}</div>
+            </div>
+          </div>
+        </Panel>
+
+        {inn1 && <Scorecard inn={inn1} />}
+        {inn2 && <Scorecard inn={inn2} />}
       </div>
     </div>
   );
@@ -1343,7 +1962,7 @@ function Watch({ onBack }) {
   const [code, setCode] = useState("");
   const [joined, setJoined] = useState(false);
 
-  const matchData = useStorageSync(joined ? `tapeball:match:${code}` : null, joined ? `/api/match/${code}` : null)[0];
+  const matchData = useStorageSync(joined ? `tapeball:match:${code}` : null, null, joined ? `/api/match/${code}` : null)[0];
 
   if (!joined) {
     return (
@@ -1377,7 +1996,7 @@ function Watch({ onBack }) {
       <BackBar title={`${matchData.teamA} vs ${matchData.teamB}`} onBack={() => setJoined(false)}
         right={<span className="tb-pulse" style={{ fontSize: 12, color: C.win, fontFamily: FONT_BODY, fontWeight: 800 }}>● LIVE</span>}
       />
-      <ScoreHeader inn={inn} teamA={matchData.teamA} teamB={matchData.teamB} />
+      <ScoreHeader inn={inn} teamA={matchData.teamA} teamB={matchData.teamB} match={matchData} />
       {inn && (
         <div style={{ padding: "0 16px" }}>
           <Panel style={{ padding: 14, marginBottom: 12 }}>

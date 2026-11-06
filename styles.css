@@ -1,23 +1,23 @@
 /* ---------------------------------------------------------
-   TAPEBALL GROUND SCORER STYLES (WITH NOTCH & SAFE AREA FIX)
+   NSL SCORECARD — TOURNAMENT STYLES (WITH NOTCH & SAFE AREA FIX)
 --------------------------------------------------------- */
 
 :root {
-  --bg: #0D1712;
-  --bg2: #0A130F;
-  --panel: #15241C;
-  --panel2: #1B2E23;
-  --panel-border: #2A3E30;
-  --tape: #F2A93B;
-  --tape2: #F2661D;
-  --wicket: #D14B41;
+  --bg: #0A110D;
+  --bg2: #0E1813;
+  --panel: #14221A;
+  --panel2: #1A2D23;
+  --panel-border: #273E30;
+  --tape: #F2A93B;       /* NSL Gold */
+  --tape2: #F2661D;      /* NSL Orange */
+  --wicket: #E0483B;
   --free: #4FA8D6;
-  --ink: #F4F1E6;
-  --ink-dim: #9AAD9F;
-  --ink-faint: #5E7267;
-  --win: #6FBF73;
-  --font-display: 'Teko', sans-serif;
-  --font-body: 'Manrope', sans-serif;
+  --ink: #F5F3EC;
+  --ink-dim: #9EB0A3;
+  --ink-faint: #607569;
+  --win: #52C474;
+  --font-display: 'Teko', system-ui, -apple-system, sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, sans-serif;
   --font-mono: 'Space Mono', monospace;
 }
 
@@ -34,9 +34,8 @@ body {
   -webkit-tap-highlight-color: transparent;
   min-height: 100vh;
   overflow-x: hidden;
-  /* Top padding ensures screen starts cleanly below phone status bar / camera notch */
   padding-top: max(16px, env(safe-area-inset-top, 24px));
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
 }
 
 .tb-btn {
@@ -45,12 +44,12 @@ body {
 }
 
 .tb-btn:active {
-  transform: scale(0.95);
-  filter: brightness(0.9);
+  transform: scale(0.96);
+  filter: brightness(0.92);
 }
 
 .tb-fadein {
-  animation: tbFade 0.25s ease-out;
+  animation: tbFade 0.22s ease-out;
 }
 
 @keyframes tbFade {
@@ -64,12 +63,92 @@ body {
 
 @keyframes tbPulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.55; }
 }
 
+/* Badges for Standings & Qualification */
+.badge-finalist {
+  background: linear-gradient(135deg, rgba(242,169,59,0.22), rgba(242,102,29,0.22));
+  border: 1px solid var(--tape);
+  color: var(--tape);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.badge-knockout {
+  background: rgba(79,168,214,0.18);
+  border: 1px solid var(--free);
+  color: var(--free);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.badge-elim {
+  background: rgba(224,72,59,0.18);
+  border: 1px solid var(--wicket);
+  color: var(--wicket);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.badge-contention {
+  background: rgba(158,176,163,0.15);
+  border: 1px solid var(--panel-border);
+  color: var(--ink-dim);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+/* Team Logo Styling */
+.team-logo-sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--tape);
+  box-shadow: 0 0 8px rgba(242,169,59,0.25);
+  background: #000;
+}
+
+.team-logo-md {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--tape);
+  box-shadow: 0 0 10px rgba(242,169,59,0.3);
+  background: #000;
+}
+
+.team-logo-lg {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2.5px solid var(--tape);
+  box-shadow: 0 0 16px rgba(242,169,59,0.35);
+  background: #000;
+}
+
+/* Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {

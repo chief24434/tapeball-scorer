@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tapeball-offline-v1';
+const CACHE_NAME = 'nsl-offline-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,13 +7,17 @@ const ASSETS = [
   './manifest.json',
   './vendor/react.min.js',
   './vendor/react-dom.min.js',
-  './vendor/babel.min.js'
+  './vendor/babel.min.js',
+  './assets/logos/ktg.jpg',
+  './assets/logos/ask.jpg',
+  './assets/logos/nkg.jpg',
+  './assets/logos/alw.jpg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Pre-caching offline app assets');
+      console.log('[SW] Pre-caching NSL offline assets');
       return cache.addAll(ASSETS);
     })
   );
@@ -36,14 +40,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Offline-first caching strategy
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
       return fetch(event.request).catch(() => {
-        // Fallback for API or page fetches when completely offline
         return caches.match('./index.html');
       });
     })
