@@ -1,6 +1,7 @@
 {
-  "short_name": "NSL Scorecard",
-  "name": "NSL Scorecard — Premier League",
+  "short_name": "NSL S2",
+  "name": "NSL S2 — National Super League Season 2",
+  "description": "Official Tournament Arena and Live Cricket Scorer for NSL Season 2",
   "icons": [
     {
       "src": "assets/logos/ktg.jpg",
@@ -14,8 +15,8 @@
     }
   ],
   "start_url": "./index.html",
-  "background_color": "#0D1712",
-  "theme_color": "#0D1712",
+  "background_color": "#0A110D",
+  "theme_color": "#0A110D",
   "display": "standalone",
   "orientation": "portrait"
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nsl-offline-v2';
+const CACHE_NAME = 'nsl-s2-offline-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +17,7 @@ const ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Pre-caching NSL offline assets');
+      console.log('[SW] Pre-caching NSL S2 offline assets');
       return cache.addAll(ASSETS);
     })
   );
@@ -40,6 +40,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.url.includes('/api/')) {
+    // API network requests bypass cache
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
